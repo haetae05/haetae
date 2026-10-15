@@ -1,0 +1,34 @@
+Business Source License 1.1
+
+Parameters
+
+Licensor: eoul (상호명: 어을)
+Licensed Work: Haetae (해태) In-Memory Verification Engine & Core AST Modules
+Change Date: 2030-10-15
+Change License: Apache License, Version 2.0, as published by the Apache Software Foundation
+
+Additional Use Grant:
+You may make use of the Licensed Work (including copying, modifying, compiling, and creating derivative works) for any personal, non-commercial, academic, research, testing, benchmarking, and internal non-competing software development purposes. 
+
+Prohibited Commercial Use:
+You are expressly prohibited from offering the Licensed Work, or any substantial portion thereof, or any derivative work based upon the Licensed Work:
+1. As a commercial developer assistant, commercial IDE extension, or standalone commercial developer tool that competes with the Licensor's commercial offerings; or
+2. As a hosted, managed, or fee-based network API, SaaS platform, or cloud verification service.
+
+Notice
+The Business Source License 1.1 (the "License") is not an Open Source License under the Open Source Definition (defined at https://opensource.org/osd) or a Free Software License under the Free Software Definition (defined at https://www.gnu.org/philosophy/free-sw.html), but you are permitted to use the Licensed Work only under the terms of this License.
+
+1. Grant of License
+Subject to the terms and conditions of this License, Licensor hereby grants to you a worldwide, non-exclusive, non-sublicensable, and non-transferable license to copy, modify, and distribute the Licensed Work, solely for the purposes permitted by the Additional Use Grant.
+
+2. Change Date and Change License
+Effective on the Change Date, Licensor hereby grants to all users a license to the Licensed Work under the terms of the Change License (Apache License, Version 2.0). As of the Change Date, the restrictions of this License shall cease to apply.
+
+3. Patent and Trademark Rights
+No patent rights or trademark rights (including the name "Haetae", "해태", and "eoul") are granted under this License. All rights not expressly granted herein are reserved by the Licensor.
+
+4. Termination
+This License and your rights to use the Licensed Work will terminate immediately if you violate any term or condition of this License. Upon termination, you must cease all use, reproduction, and distribution of the Licensed Work.
+
+5. Disclaimer of Warranty
+THE LICENSED WORK IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, AND NONINFRINGEMENT. IN NO EVENT SHALL THE LICENSOR OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES, OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT, OR OTHERWISE, ARISING FROM, OUT OF, OR IN CONNECTION WITH THE LICENSED WORK OR THE USE OR OTHER DEALINGS IN THE LICENSED WORK.

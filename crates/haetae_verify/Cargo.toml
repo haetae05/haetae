@@ -1,0 +1,16 @@
+[package]
+name = "haetae_verify"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+haetae_core = { path = "../haetae_core" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[target.'cfg(all(target_os = "linux", not(miri)))'.dependencies]
+libc = "0.2"
+
+[lints]
+workspace = true

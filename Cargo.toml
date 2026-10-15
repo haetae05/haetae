@@ -1,0 +1,24 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/haetae_core",
+    "crates/haetae_verify",
+]
+
+[workspace.lints.rust]
+warnings = "deny"
+
+[workspace.lints.clippy]
+all = "deny"
+
+[workspace.dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+thiserror = "2.0"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+panic = "abort"
+strip = true
