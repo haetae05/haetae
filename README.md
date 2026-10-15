@@ -3,7 +3,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/License-BSL%201.1-2563eb.svg" alt="License: BSL 1.1" />
   <img src="https://img.shields.io/badge/Rust-1.78%2B%20(2021%20Edition)-dea584.svg?logo=rust" alt="Rust 1.78+" />
-  <img src="https://img.shields.io/badge/Tests-45%2F45%20Passed-10b981.svg" alt="Tests Passed" />
+  <img src="https://img.shields.io/badge/Tests-145%2F145%20Passed-10b981.svg" alt="Tests Passed" />
   <img src="https://img.shields.io/badge/In--Memory%20Latency-%3C3.2ms-f59e0b.svg" alt="Latency" />
   <img src="https://img.shields.io/badge/Platform-Linux%20%7C%20macOS%20%7C%20Windows-64748b.svg" alt="Platform" />
 </p>
