@@ -1,0 +1,236 @@
+{
+  "name": "haetae",
+  "displayName": "Haetae (해태) - Contract-Driven Silent Assistant",
+  "description": "Silent, contract-driven on-device coding assistant with in-memory verification",
+  "version": "0.1.0",
+  "publisher": "eoul",
+  "license": "SEE LICENSE IN LICENSE",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/haetae05/haetae"
+  },
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Linters",
+    "AI"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "haetae.inline",
+        "title": "Inline Code Synthesis",
+        "category": "Haetae",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "haetae.comment",
+        "title": "Selection Refactor Comment Card",
+        "category": "Haetae",
+        "icon": "$(comment-discussion)"
+      },
+      {
+        "command": "haetae.verify",
+        "title": "Verify File (Dynamic Bounds & Multi-Contract Fuzz)",
+        "category": "Haetae",
+        "icon": "$(beaker)"
+      },
+      {
+        "command": "haetae.toggleResearch",
+        "title": "Toggle Web Research",
+        "category": "Haetae",
+        "icon": "$(search)"
+      },
+      {
+        "command": "haetae.applyComment",
+        "title": "Apply Refactor (Keep)",
+        "category": "Haetae",
+        "icon": "$(check)"
+      },
+      {
+        "command": "haetae.discardComment",
+        "title": "Dismiss Refactor (Undo)",
+        "category": "Haetae",
+        "icon": "$(discard)"
+      },
+      {
+        "command": "haetae.boost",
+        "title": "Run Hardware Boost Benchmark",
+        "category": "Haetae",
+        "icon": "$(zap)"
+      },
+      {
+        "command": "haetae.auth",
+        "title": "Authenticate License Key",
+        "category": "Haetae",
+        "icon": "$(key)"
+      },
+      {
+        "command": "haetae.setupOllama",
+        "title": "Setup / Start Local Ollama AI Engine",
+        "category": "Haetae",
+        "icon": "$(server-process)"
+      },
+      {
+        "command": "haetae.customizeShortcuts",
+        "title": "Customize Keybindings (Open keybindings.json)",
+        "category": "Haetae",
+        "icon": "$(gear)"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "haetae.inline",
+        "key": "ctrl+i",
+        "mac": "cmd+i",
+        "when": "editorTextFocus && !findWidgetVisible"
+      },
+      {
+        "command": "haetae.inline",
+        "key": "alt+k",
+        "when": "editorTextFocus && !findWidgetVisible"
+      },
+      {
+        "command": "haetae.comment",
+        "key": "alt+c",
+        "when": "editorHasSelection && !findWidgetVisible"
+      },
+      {
+        "command": "haetae.comment",
+        "key": "ctrl+shift+r",
+        "when": "editorHasSelection && !findWidgetVisible"
+      },
+      {
+        "command": "haetae.verify",
+        "key": "alt+v",
+        "when": "editorTextFocus && !findWidgetVisible"
+      },
+      {
+        "command": "haetae.verify",
+        "key": "ctrl+alt+h",
+        "mac": "cmd+alt+h",
+        "when": "editorTextFocus && !findWidgetVisible"
+      },
+      {
+        "command": "haetae.auth",
+        "key": "ctrl+alt+a",
+        "when": "editorTextFocus && !findWidgetVisible"
+      },
+      {
+        "command": "haetae.boost",
+        "key": "ctrl+alt+f",
+        "mac": "cmd+alt+f",
+        "when": "editorTextFocus && !findWidgetVisible"
+      },
+      {
+        "command": "haetae.toggleResearch",
+        "key": "alt+r",
+        "when": "editorTextFocus && !findWidgetVisible"
+      },
+      {
+        "command": "haetae.setupOllama",
+        "key": "ctrl+alt+o",
+        "mac": "cmd+alt+o",
+        "when": "editorTextFocus && !findWidgetVisible"
+      }
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "haetae.inline",
+          "group": "haetae@1"
+        },
+        {
+          "command": "haetae.comment",
+          "group": "haetae@2",
+          "when": "editorHasSelection"
+        },
+        {
+          "command": "haetae.verify",
+          "group": "haetae@3"
+        },
+        {
+          "command": "haetae.toggleResearch",
+          "group": "haetae@4"
+        },
+        {
+          "command": "haetae.boost",
+          "group": "haetae@5"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "haetae.verify",
+          "group": "navigation@1"
+        },
+        {
+          "command": "haetae.toggleResearch",
+          "group": "navigation@2"
+        },
+        {
+          "command": "haetae.boost",
+          "group": "navigation@3"
+        },
+        {
+          "command": "haetae.inline",
+          "group": "navigation@4"
+        },
+        {
+          "command": "haetae.comment",
+          "group": "navigation@5",
+          "when": "editorHasSelection"
+        }
+      ],
+      "comments/commentThread/title": [
+        {
+          "command": "haetae.applyComment",
+          "group": "inline@1"
+        },
+        {
+          "command": "haetae.discardComment",
+          "group": "inline@2"
+        },
+        {
+          "command": "haetae.toggleResearch",
+          "group": "inline@3"
+        }
+      ],
+      "comments/comment/title": [
+        {
+          "command": "haetae.applyComment",
+          "group": "inline@1"
+        },
+        {
+          "command": "haetae.discardComment",
+          "group": "inline@2"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Haetae",
+      "properties": {
+        "haetae.binaryPath": {
+          "type": "string",
+          "default": "",
+          "description": "Custom path to the haetae native verification binary"
+        },
+        "haetae.ollamaHost": {
+          "type": "string",
+          "default": "http://127.0.0.1:11434",
+          "description": "Ollama API host endpoint"
+        },
+        "haetae.defaultLanguage": {
+          "type": "string",
+          "default": "c",
+          "description": "Default programming language for analysis"
+        }
+      }
+    }
+  }
+}

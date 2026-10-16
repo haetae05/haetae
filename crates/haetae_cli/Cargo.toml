@@ -1,0 +1,23 @@
+[package]
+name = "haetae_cli"
+version = "0.1.0"
+edition = "2021"
+default-run = "haetae"
+
+[[bin]]
+name = "haetae"
+path = "src/main.rs"
+
+
+[dependencies]
+haetae_core = { path = "../haetae_core" }
+haetae_verify = { path = "../haetae_verify" }
+haetae_engine = { path = "../haetae_engine" }
+haetae_auth = { path = "../haetae_auth" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+
+[lints]
+workspace = true

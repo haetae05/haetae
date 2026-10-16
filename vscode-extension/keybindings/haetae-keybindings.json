@@ -1,0 +1,73 @@
+[
+  {
+    "key": "ctrl+i",
+    "mac": "cmd+i",
+    "command": "haetae.inline",
+    "when": "editorTextFocus && !findWidgetVisible"
+  },
+  {
+    "key": "alt+k",
+    "command": "haetae.inline",
+    "when": "editorTextFocus && !findWidgetVisible"
+  },
+  {
+    "key": "alt+c",
+    "mac": "alt+c",
+    "command": "haetae.comment",
+    "when": "editorHasSelection && !findWidgetVisible"
+  },
+  {
+    "key": "ctrl+shift+r",
+    "mac": "cmd+shift+r",
+    "command": "haetae.comment",
+    "when": "editorHasSelection && !findWidgetVisible"
+  },
+  {
+    "key": "alt+v",
+    "mac": "alt+v",
+    "command": "haetae.verify",
+    "when": "editorTextFocus && !findWidgetVisible"
+  },
+  {
+    "key": "ctrl+alt+h",
+    "mac": "cmd+alt+h",
+    "command": "haetae.verify",
+    "when": "editorTextFocus && !findWidgetVisible"
+  },
+  {
+    "key": "alt+r",
+    "mac": "alt+r",
+    "command": "haetae.toggleResearch",
+    "when": "editorTextFocus && !findWidgetVisible"
+  },
+  {
+    "key": "ctrl+alt+enter",
+    "mac": "cmd+alt+enter",
+    "command": "haetae.applyComment",
+    "when": "editorTextFocus || commentThreadFocused"
+  },
+  {
+    "key": "ctrl+alt+backspace",
+    "mac": "cmd+alt+backspace",
+    "command": "haetae.discardComment",
+    "when": "editorTextFocus || commentThreadFocused"
+  },
+  {
+    "key": "ctrl+alt+f",
+    "mac": "cmd+alt+f",
+    "command": "haetae.boost",
+    "when": "editorTextFocus && !findWidgetVisible"
+  },
+  {
+    "key": "ctrl+alt+a",
+    "mac": "cmd+alt+a",
+    "command": "haetae.auth",
+    "when": "editorTextFocus && !findWidgetVisible"
+  },
+  {
+    "key": "ctrl+alt+o",
+    "mac": "cmd+alt+o",
+    "command": "haetae.setupOllama",
+    "when": "editorTextFocus && !findWidgetVisible"
+  }
+]
