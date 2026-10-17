@@ -1,4 +1,4 @@
-use haetae_core::config::{DIAG_LINE_NUMBER_WIDTH, MAX_STACK_FRAME_BYTES, NUM_ONE, NUM_TWENTY};
+use haetae_core::config::{BYTES_PER_MB, DIAG_LINE_NUMBER_WIDTH, MAX_STACK_FRAME_BYTES};
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct DiagnosticReport {
@@ -32,11 +32,7 @@ impl DiagnosticReport {
         out.push_str("  │\n");
 
         if let Some(ref prev) = self.snippet_prev {
-            let prev_line = if self.line > NUM_ONE {
-                self.line - NUM_ONE
-            } else {
-                NUM_ONE
-            };
+            let prev_line = if self.line > 1 { self.line - 1 } else { 1 };
             out.push_str(&format!(
                 "{:width$} │   {}\n",
                 prev_line,
@@ -53,7 +49,7 @@ impl DiagnosticReport {
         ));
 
         let pad = " ".repeat(self.column);
-        let underline = "^".repeat(self.underline_label.len().max(NUM_ONE));
+        let underline = "^".repeat(self.underline_label.len().max(1));
         out.push_str(&format!(
             "  │   {}{} {}\n",
             pad, underline, self.underline_label
@@ -72,7 +68,7 @@ impl DiagnosticReport {
             self.metrics_failed,
             self.duration_ms,
             self.stack_frame_bytes,
-            MAX_STACK_FRAME_BYTES / (NUM_ONE << NUM_TWENTY)
+            MAX_STACK_FRAME_BYTES / BYTES_PER_MB
         ));
         out.push_str(&format!(
             "  = location: function `{}` in {}:{}:{}\n",

@@ -1,9 +1,16 @@
 use crate::tcc_engine::VerifyError;
 use haetae_core::config::{
-    MAX_CALL_STACK_DEPTH, MAX_STACK_FRAME_BYTES, NUM_EIGHT, NUM_FOUR, NUM_ONE, NUM_TWO, NUM_ZERO,
-    POSIX_SIGFPE, POSIX_SIGSEGV,
+    MAX_CALL_STACK_DEPTH, MAX_STACK_FRAME_BYTES, POSIX_SIGFPE, POSIX_SIGSEGV,
 };
 use std::collections::HashMap;
+
+const HEX_PREFIX_LEN: usize = 2;
+const SHIFT_MASK_32_BIT: i64 = 31;
+const SIZEOF_U16: usize = 2;
+const SIZEOF_U32: usize = 4;
+const SIZEOF_U64: usize = 8;
+const MIN_DECL_WORDS: usize = 2;
+const SPLIT_ASSIGNMENT_PARTS: usize = 2;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Token {
@@ -43,40 +50,37 @@ pub enum Token {
 pub fn tokenize(input: &str) -> Vec<Token> {
     let mut tokens = Vec::new();
     let chars: Vec<char> = input.chars().collect();
-    let mut i = NUM_ZERO;
+    let mut i = 0;
 
     while i < chars.len() {
         let c = chars[i];
         if c.is_whitespace() {
-            i += NUM_ONE;
+            i += 1;
             continue;
         }
 
         if c.is_ascii_digit() {
             let mut num_str = String::new();
-            if c == '0'
-                && i + NUM_ONE < chars.len()
-                && (chars[i + NUM_ONE] == 'x' || chars[i + NUM_ONE] == 'X')
-            {
-                i += NUM_TWO;
+            if c == '0' && i + 1 < chars.len() && (chars[i + 1] == 'x' || chars[i + 1] == 'X') {
+                i += HEX_PREFIX_LEN;
                 while i < chars.len() && chars[i].is_ascii_hexdigit() {
                     num_str.push(chars[i]);
-                    i += NUM_ONE;
+                    i += 1;
                 }
                 while i < chars.len()
                     && (chars[i] == 'u' || chars[i] == 'U' || chars[i] == 'l' || chars[i] == 'L')
                 {
-                    i += NUM_ONE;
+                    i += 1;
                 }
-                let val = i64::from_str_radix(&num_str, haetae_core::config::HEX_RADIX)
-                    .unwrap_or(NUM_ZERO as i64);
+                let val =
+                    i64::from_str_radix(&num_str, haetae_core::config::HEX_RADIX).unwrap_or(0);
                 tokens.push(Token::Number(val));
                 continue;
             }
 
             while i < chars.len() && chars[i].is_ascii_digit() {
                 num_str.push(chars[i]);
-                i += NUM_ONE;
+                i += 1;
             }
             while i < chars.len()
                 && (chars[i] == 'u'
@@ -86,9 +90,9 @@ pub fn tokenize(input: &str) -> Vec<Token> {
                     || chars[i] == 'f'
                     || chars[i] == '.')
             {
-                i += NUM_ONE;
+                i += 1;
             }
-            let val = num_str.parse::<i64>().unwrap_or(NUM_ZERO as i64);
+            let val = num_str.parse::<i64>().unwrap_or(0);
             tokens.push(Token::Number(val));
             continue;
         }
@@ -97,7 +101,7 @@ pub fn tokenize(input: &str) -> Vec<Token> {
             let mut id = String::new();
             while i < chars.len() && (chars[i].is_ascii_alphanumeric() || chars[i] == '_') {
                 id.push(chars[i]);
-                i += NUM_ONE;
+                i += 1;
             }
             tokens.push(Token::Ident(id));
             continue;
@@ -121,16 +125,16 @@ pub fn tokenize(input: &str) -> Vec<Token> {
             ',' => tokens.push(Token::Comma),
             ';' => tokens.push(Token::Semi),
             '&' => {
-                if i + NUM_ONE < chars.len() && chars[i + NUM_ONE] == '&' {
-                    i += NUM_ONE;
+                if i + 1 < chars.len() && chars[i + 1] == '&' {
+                    i += 1;
                     tokens.push(Token::Amp);
                 } else {
                     tokens.push(Token::Amp);
                 }
             }
             '|' => {
-                if i + NUM_ONE < chars.len() && chars[i + NUM_ONE] == '|' {
-                    i += NUM_ONE;
+                if i + 1 < chars.len() && chars[i + 1] == '|' {
+                    i += 1;
                     tokens.push(Token::Pipe);
                 } else {
                     tokens.push(Token::Pipe);
@@ -138,38 +142,38 @@ pub fn tokenize(input: &str) -> Vec<Token> {
             }
             '^' => tokens.push(Token::Caret),
             '!' => {
-                if i + NUM_ONE < chars.len() && chars[i + NUM_ONE] == '=' {
-                    i += NUM_ONE;
+                if i + 1 < chars.len() && chars[i + 1] == '=' {
+                    i += 1;
                     tokens.push(Token::NotEq);
                 } else {
                     tokens.push(Token::Exclamation);
                 }
             }
             '=' => {
-                if i + NUM_ONE < chars.len() && chars[i + NUM_ONE] == '=' {
-                    i += NUM_ONE;
+                if i + 1 < chars.len() && chars[i + 1] == '=' {
+                    i += 1;
                     tokens.push(Token::EqEq);
                 } else {
                     tokens.push(Token::Assign);
                 }
             }
             '<' => {
-                if i + NUM_ONE < chars.len() && chars[i + NUM_ONE] == '<' {
-                    i += NUM_ONE;
+                if i + 1 < chars.len() && chars[i + 1] == '<' {
+                    i += 1;
                     tokens.push(Token::Shl);
-                } else if i + NUM_ONE < chars.len() && chars[i + NUM_ONE] == '=' {
-                    i += NUM_ONE;
+                } else if i + 1 < chars.len() && chars[i + 1] == '=' {
+                    i += 1;
                     tokens.push(Token::LtEq);
                 } else {
                     tokens.push(Token::Lt);
                 }
             }
             '>' => {
-                if i + NUM_ONE < chars.len() && chars[i + NUM_ONE] == '>' {
-                    i += NUM_ONE;
+                if i + 1 < chars.len() && chars[i + 1] == '>' {
+                    i += 1;
                     tokens.push(Token::Shr);
-                } else if i + NUM_ONE < chars.len() && chars[i + NUM_ONE] == '=' {
-                    i += NUM_ONE;
+                } else if i + 1 < chars.len() && chars[i + 1] == '=' {
+                    i += 1;
                     tokens.push(Token::GtEq);
                 } else {
                     tokens.push(Token::Gt);
@@ -177,7 +181,7 @@ pub fn tokenize(input: &str) -> Vec<Token> {
             }
             _ => {}
         }
-        i += NUM_ONE;
+        i += 1;
     }
 
     tokens
@@ -195,10 +199,10 @@ impl<'a> ExprParser<'a> {
     pub fn new(tokens: &'a [Token], env: &'a mut HashMap<String, i64>) -> Self {
         Self {
             tokens,
-            pos: NUM_ZERO,
+            pos: 0,
             env,
             source: None,
-            call_depth: NUM_ZERO,
+            call_depth: 0,
         }
     }
 
@@ -210,7 +214,7 @@ impl<'a> ExprParser<'a> {
     ) -> Self {
         Self {
             tokens,
-            pos: NUM_ZERO,
+            pos: 0,
             env,
             source,
             call_depth,
@@ -224,7 +228,7 @@ impl<'a> ExprParser<'a> {
     fn next(&mut self) -> Option<&Token> {
         let tok = self.tokens.get(self.pos);
         if tok.is_some() {
-            self.pos += NUM_ONE;
+            self.pos += 1;
         }
         tok
     }
@@ -242,11 +246,7 @@ impl<'a> ExprParser<'a> {
                 self.next();
             }
             let false_val = self.parse_expression()?;
-            cond = if cond != NUM_ZERO as i64 {
-                true_val
-            } else {
-                false_val
-            };
+            cond = if cond != 0 { true_val } else { false_val };
         }
         Ok(cond)
     }
@@ -288,20 +288,12 @@ impl<'a> ExprParser<'a> {
                 Token::EqEq => {
                     self.next();
                     let rhs = self.parse_relational()?;
-                    lhs = if lhs == rhs {
-                        NUM_ONE as i64
-                    } else {
-                        NUM_ZERO as i64
-                    };
+                    lhs = if lhs == rhs { 1 } else { 0 };
                 }
                 Token::NotEq => {
                     self.next();
                     let rhs = self.parse_relational()?;
-                    lhs = if lhs != rhs {
-                        NUM_ONE as i64
-                    } else {
-                        NUM_ZERO as i64
-                    };
+                    lhs = if lhs != rhs { 1 } else { 0 };
                 }
                 _ => break,
             }
@@ -316,38 +308,22 @@ impl<'a> ExprParser<'a> {
                 Token::Lt => {
                     self.next();
                     let rhs = self.parse_shift()?;
-                    lhs = if lhs < rhs {
-                        NUM_ONE as i64
-                    } else {
-                        NUM_ZERO as i64
-                    };
+                    lhs = if lhs < rhs { 1 } else { 0 };
                 }
                 Token::LtEq => {
                     self.next();
                     let rhs = self.parse_shift()?;
-                    lhs = if lhs <= rhs {
-                        NUM_ONE as i64
-                    } else {
-                        NUM_ZERO as i64
-                    };
+                    lhs = if lhs <= rhs { 1 } else { 0 };
                 }
                 Token::Gt => {
                     self.next();
                     let rhs = self.parse_shift()?;
-                    lhs = if lhs > rhs {
-                        NUM_ONE as i64
-                    } else {
-                        NUM_ZERO as i64
-                    };
+                    lhs = if lhs > rhs { 1 } else { 0 };
                 }
                 Token::GtEq => {
                     self.next();
                     let rhs = self.parse_shift()?;
-                    lhs = if lhs >= rhs {
-                        NUM_ONE as i64
-                    } else {
-                        NUM_ZERO as i64
-                    };
+                    lhs = if lhs >= rhs { 1 } else { 0 };
                 }
                 _ => break,
             }
@@ -362,13 +338,13 @@ impl<'a> ExprParser<'a> {
                 Token::Shl => {
                     self.next();
                     let rhs = self.parse_additive()?;
-                    let safe_shift = (rhs & (haetae_core::config::NUM_THIRTY_ONE as i64)) as u32;
+                    let safe_shift = (rhs & SHIFT_MASK_32_BIT) as u32;
                     lhs = lhs.wrapping_shl(safe_shift);
                 }
                 Token::Shr => {
                     self.next();
                     let rhs = self.parse_additive()?;
-                    let safe_shift = (rhs & (haetae_core::config::NUM_THIRTY_ONE as i64)) as u32;
+                    let safe_shift = (rhs & SHIFT_MASK_32_BIT) as u32;
                     lhs = lhs.wrapping_shr(safe_shift);
                 }
                 _ => break,
@@ -412,7 +388,7 @@ impl<'a> ExprParser<'a> {
                 Token::Slash => {
                     self.next();
                     let rhs = self.parse_unary()?;
-                    if rhs == NUM_ZERO as i64 {
+                    if rhs == 0 {
                         return Err(VerifyError::CrashSignal(POSIX_SIGFPE));
                     }
                     lhs = lhs.wrapping_div(rhs);
@@ -420,7 +396,7 @@ impl<'a> ExprParser<'a> {
                 Token::Percent => {
                     self.next();
                     let rhs = self.parse_unary()?;
-                    if rhs == NUM_ZERO as i64 {
+                    if rhs == 0 {
                         return Err(VerifyError::CrashSignal(POSIX_SIGFPE));
                     }
                     lhs = lhs.wrapping_rem(rhs);
@@ -446,16 +422,12 @@ impl<'a> ExprParser<'a> {
             Some(Token::Exclamation) => {
                 self.next();
                 let val = self.parse_unary()?;
-                Ok(if val == NUM_ZERO as i64 {
-                    NUM_ONE as i64
-                } else {
-                    NUM_ZERO as i64
-                })
+                Ok(if val == 0 { 1 } else { 0 })
             }
             Some(Token::Star) => {
                 self.next();
                 let ptr_val = self.parse_unary()?;
-                if ptr_val == NUM_ZERO as i64 {
+                if ptr_val == 0 {
                     return Err(VerifyError::CrashSignal(POSIX_SIGSEGV));
                 }
                 let val = self
@@ -490,11 +462,11 @@ impl<'a> ExprParser<'a> {
                         if let Some(Token::RParen) = self.peek() {
                             self.next();
                         }
-                        if arg == NUM_ZERO as i64 {
+                        if arg == 0 {
                             return Err(VerifyError::CrashSignal(POSIX_SIGFPE));
                         }
                     }
-                    return Ok(NUM_ZERO as i64);
+                    return Ok(0);
                 }
 
                 if name == "haetae_checked_div" {
@@ -508,7 +480,7 @@ impl<'a> ExprParser<'a> {
                         if let Some(Token::RParen) = self.peek() {
                             self.next();
                         }
-                        if b == NUM_ZERO as i64 {
+                        if b == 0 {
                             return Err(VerifyError::CrashSignal(POSIX_SIGFPE));
                         }
                         return Ok(a.wrapping_div(b));
@@ -526,10 +498,29 @@ impl<'a> ExprParser<'a> {
                         if let Some(Token::RParen) = self.peek() {
                             self.next();
                         }
-                        if b == NUM_ZERO as i64 {
+                        if b == 0 {
                             return Err(VerifyError::CrashSignal(POSIX_SIGFPE));
                         }
                         return Ok(a.wrapping_rem(b));
+                    }
+                }
+
+                if name == "haetae_checked_mul" {
+                    if let Some(Token::LParen) = self.peek() {
+                        self.next();
+                        let a = self.parse_expression()?;
+                        if let Some(Token::Comma) = self.peek() {
+                            self.next();
+                        }
+                        let b = self.parse_expression()?;
+                        if let Some(Token::RParen) = self.peek() {
+                            self.next();
+                        }
+                        let (res, overflow) = a.overflowing_mul(b);
+                        if overflow {
+                            return Err(VerifyError::CrashSignal(POSIX_SIGFPE));
+                        }
+                        return Ok(res);
                     }
                 }
 
@@ -544,7 +535,7 @@ impl<'a> ExprParser<'a> {
                         if let Some(Token::RParen) = self.peek() {
                             self.next();
                         }
-                        if idx < NUM_ZERO as i64 || idx >= len {
+                        if idx < 0 || idx >= len {
                             return Err(VerifyError::CrashSignal(POSIX_SIGSEGV));
                         }
                         return Ok(idx);
@@ -575,16 +566,16 @@ impl<'a> ExprParser<'a> {
                         self.next();
                     }
                     if let Some(len) = self.env.get(&format!("{}_len", name)).copied() {
-                        if idx < NUM_ZERO as i64 || idx >= len {
+                        if idx < 0 || idx >= len {
                             return Err(VerifyError::CrashSignal(POSIX_SIGSEGV));
                         }
                     }
                     let key = format!("{}[{}]", name, idx);
-                    let val = self.env.get(&key).copied().unwrap_or(NUM_ZERO as i64);
+                    let val = self.env.get(&key).copied().unwrap_or(0);
                     return Ok(val);
                 }
 
-                let val = self.env.get(&name).copied().unwrap_or(NUM_ZERO as i64);
+                let val = self.env.get(&name).copied().unwrap_or(0);
                 Ok(val)
             }
             Some(Token::LParen) => {
@@ -610,7 +601,7 @@ impl<'a> ExprParser<'a> {
                 }
                 Ok(val)
             }
-            _ => Ok(NUM_ZERO as i64),
+            _ => Ok(0),
         }
     }
 
@@ -623,11 +614,7 @@ impl<'a> ExprParser<'a> {
             if let Some((params, body)) = find_function_params_and_body(src, fn_name) {
                 let mut callee_env = self.env.clone();
                 for (i, p) in params.iter().enumerate() {
-                    let val = if i < args.len() {
-                        args[i]
-                    } else {
-                        NUM_ZERO as i64
-                    };
+                    let val = if i < args.len() { args[i] } else { 0 };
                     callee_env.insert(p.clone(), val);
                     callee_env.insert(format!("p{}", i), val);
                 }
@@ -635,37 +622,37 @@ impl<'a> ExprParser<'a> {
                     &body,
                     &mut callee_env,
                     self.source,
-                    self.call_depth + NUM_ONE,
+                    self.call_depth + 1,
                 )?;
                 return Ok(res as i64);
             }
         }
 
         if fn_name == "abs" {
-            return Ok(args.first().copied().unwrap_or(NUM_ZERO as i64).abs());
+            return Ok(args.first().copied().unwrap_or(0).abs());
         }
 
-        Ok(NUM_ZERO as i64)
+        Ok(0)
     }
 }
 
 pub fn get_type_size(type_str: &str) -> usize {
     let t = type_str.trim();
     if t.contains('*') {
-        return NUM_EIGHT;
+        return SIZEOF_U64;
     }
     if t.contains("char") || t.contains("bool") || t.contains("int8") {
-        NUM_ONE
+        1
     } else if t.contains("short") || t.contains("int16") {
-        NUM_TWO
-    } else if t.contains("long long")
+        SIZEOF_U16
+    } else if t.contains("long")
         || t.contains("int64")
         || t.contains("double")
         || t.contains("size_t")
     {
-        NUM_EIGHT
+        SIZEOF_U64
     } else {
-        NUM_FOUR
+        SIZEOF_U32
     }
 }
 
@@ -679,9 +666,9 @@ pub fn find_function_params_and_body(
         let name_match_prefix = format!(" {}(", fn_name);
         let starts_with_prefix = format!("{}(", fn_name);
         let fn_offset = if trimmed.starts_with(&starts_with_prefix) {
-            Some(NUM_ZERO)
+            Some(0)
         } else {
-            trimmed.find(&name_match_prefix).map(|idx| idx + NUM_ONE)
+            trimmed.find(&name_match_prefix).map(|idx| idx + 1)
         };
 
         if let Some(offset) = fn_offset {
@@ -694,7 +681,7 @@ pub fn find_function_params_and_body(
                 let mut params = Vec::new();
                 if let Some(open_p) = after_fn.find('(') {
                     if let Some(close_p) = after_fn[open_p..].find(')') {
-                        let param_str = &after_fn[open_p + NUM_ONE..open_p + close_p];
+                        let param_str = &after_fn[open_p + 1..open_p + close_p];
                         for p in param_str.split(',') {
                             let p_trim = p.trim();
                             if !p_trim.is_empty() && p_trim != "void" {
@@ -713,17 +700,17 @@ pub fn find_function_params_and_body(
                 let mut body = Vec::new();
                 let mut brace_start = None;
                 let mut brace_end = None;
-                let mut depth = NUM_ZERO;
+                let mut depth = 0;
 
                 for (idx, ch) in after_fn.char_indices() {
                     if ch == '{' {
-                        if depth == NUM_ZERO {
+                        if depth == 0 {
                             brace_start = Some(idx);
                         }
-                        depth += NUM_ONE;
-                    } else if ch == '}' && depth > NUM_ZERO {
-                        depth -= NUM_ONE;
-                        if depth == NUM_ZERO {
+                        depth += 1;
+                    } else if ch == '}' && depth > 0 {
+                        depth -= 1;
+                        if depth == 0 {
                             brace_end = Some(idx);
                             break;
                         }
@@ -731,7 +718,7 @@ pub fn find_function_params_and_body(
                 }
 
                 if let (Some(b_start), Some(b_end)) = (brace_start, brace_end) {
-                    let inside = after_fn[b_start + NUM_ONE..b_end].trim();
+                    let inside = after_fn[b_start + 1..b_end].trim();
                     for stmt in inside.split(';') {
                         let st = stmt.trim();
                         if !st.is_empty() {
@@ -742,7 +729,7 @@ pub fn find_function_params_and_body(
                 }
 
                 if let Some(b_start) = brace_start {
-                    let rest = after_fn[b_start + NUM_ONE..].trim();
+                    let rest = after_fn[b_start + 1..].trim();
                     if !rest.is_empty() && rest != "}" {
                         body.push(rest.to_string());
                     }
@@ -752,12 +739,12 @@ pub fn find_function_params_and_body(
                     let inner_trimmed = inner.trim();
                     for ch in inner_trimmed.chars() {
                         if ch == '{' {
-                            depth += NUM_ONE;
-                        } else if ch == '}' && depth > NUM_ZERO {
-                            depth -= NUM_ONE;
+                            depth += 1;
+                        } else if ch == '}' && depth > 0 {
+                            depth -= 1;
                         }
                     }
-                    if depth == NUM_ZERO {
+                    if depth == 0 {
                         break;
                     }
                     if !inner_trimmed.is_empty() && inner_trimmed != "{" {
@@ -777,7 +764,7 @@ pub fn execute_function_lines(
     source: Option<&str>,
     call_depth: usize,
 ) -> Result<i32, VerifyError> {
-    let mut local_stack_bytes: usize = NUM_ZERO;
+    let mut local_stack_bytes: usize = 0;
 
     for line in lines {
         let trimmed = line.trim();
@@ -792,13 +779,13 @@ pub fn execute_function_lines(
         if trimmed.starts_with("if ") || trimmed.starts_with("if(") {
             if let Some(open_p) = trimmed.find('(') {
                 if let Some(close_p) = trimmed.rfind(')') {
-                    let cond_str = &trimmed[open_p + NUM_ONE..close_p];
+                    let cond_str = &trimmed[open_p + 1..close_p];
                     let cond_toks = tokenize(cond_str);
                     let mut parser = ExprParser::with_context(&cond_toks, env, source, call_depth);
                     let cond_res = parser.parse_expression()?;
 
-                    if cond_res != NUM_ZERO as i64 {
-                        let raw_rest = trimmed[close_p + NUM_ONE..].trim();
+                    if cond_res != 0 {
+                        let raw_rest = trimmed[close_p + 1..].trim();
                         let rest = raw_rest
                             .trim_start_matches('{')
                             .trim_end_matches('}')
@@ -844,16 +831,16 @@ pub fn execute_function_lines(
             let decl = trimmed.trim_end_matches(';');
             if let Some(brace_open) = decl.find('{') {
                 if let Some(brace_close) = decl.find('}') {
-                    let items_str = &decl[brace_open + NUM_ONE..brace_close];
+                    let items_str = &decl[brace_open + 1..brace_close];
                     let items: Vec<&str> = items_str.split(',').collect();
-                    let before_eq = decl[..decl.find('=').unwrap_or(NUM_ZERO)].trim();
+                    let before_eq = decl[..decl.find('=').unwrap_or(0)].trim();
                     let type_size = get_type_size(before_eq);
                     let name_part = before_eq.split_whitespace().last().unwrap_or("");
                     if let Some(br_open) = name_part.find('[') {
                         let arr_name = &name_part[..br_open];
                         let br_close = name_part.find(']').unwrap_or(name_part.len());
-                        let declared_len = if br_close > br_open + NUM_ONE {
-                            name_part[br_open + NUM_ONE..br_close]
+                        let declared_len = if br_close > br_open + 1 {
+                            name_part[br_open + 1..br_close]
                                 .trim()
                                 .parse::<i64>()
                                 .unwrap_or(items.len() as i64)
@@ -870,7 +857,7 @@ pub fn execute_function_lines(
                             let expr_toks = tokenize(itm);
                             let mut parser =
                                 ExprParser::with_context(&expr_toks, env, source, call_depth);
-                            let v = parser.parse_expression().unwrap_or(NUM_ZERO as i64);
+                            let v = parser.parse_expression().unwrap_or(0);
                             env.insert(format!("{}[{}]", arr_name, idx), v);
                         }
                         continue;
@@ -882,14 +869,14 @@ pub fn execute_function_lines(
         if trimmed.contains('[') && trimmed.contains(']') && !trimmed.contains('=') {
             let before_semi = trimmed.trim_end_matches(';');
             let words: Vec<&str> = before_semi.split_whitespace().collect();
-            if words.len() >= NUM_TWO {
-                let type_part = words[..words.len() - NUM_ONE].join(" ");
+            if words.len() >= MIN_DECL_WORDS {
+                let type_part = words[..words.len() - 1].join(" ");
                 let type_size = get_type_size(&type_part);
                 if let Some(var_part) = words.last() {
                     if let (Some(br_o), Some(br_c)) = (var_part.find('['), var_part.find(']')) {
                         if br_o < br_c {
-                            let size_str = &var_part[br_o + NUM_ONE..br_c];
-                            let elem_count = size_str.trim().parse::<usize>().unwrap_or(NUM_ZERO);
+                            let size_str = &var_part[br_o + 1..br_c];
+                            let elem_count = size_str.trim().parse::<usize>().unwrap_or(0);
                             let byte_size = type_size.saturating_mul(elem_count);
                             local_stack_bytes = local_stack_bytes.saturating_add(byte_size);
                             if local_stack_bytes > MAX_STACK_FRAME_BYTES {
@@ -911,21 +898,21 @@ pub fn execute_function_lines(
             && trimmed.ends_with(';')
         {
             let stmt = trimmed.trim_end_matches(';');
-            let parts: Vec<&str> = stmt.splitn(NUM_TWO, '=').collect();
-            if parts.len() == NUM_TWO {
-                let left = parts[NUM_ZERO].trim();
+            let parts: Vec<&str> = stmt.splitn(SPLIT_ASSIGNMENT_PARTS, '=').collect();
+            if parts.len() == SPLIT_ASSIGNMENT_PARTS {
+                let left = parts[0].trim();
                 if let (Some(b_o), Some(b_c)) = (left.find('['), left.find(']')) {
                     let arr_name = &left[..b_o];
-                    let idx_str = &left[b_o + NUM_ONE..b_c];
+                    let idx_str = &left[b_o + 1..b_c];
                     let idx_toks = tokenize(idx_str);
                     let mut p_idx = ExprParser::with_context(&idx_toks, env, source, call_depth);
-                    let idx = p_idx.parse_expression().unwrap_or(NUM_ZERO as i64);
+                    let idx = p_idx.parse_expression().unwrap_or(0);
                     if let Some(len) = env.get(&format!("{}_len", arr_name)).copied() {
-                        if idx < NUM_ZERO as i64 || idx >= len {
+                        if idx < 0 || idx >= len {
                             return Err(VerifyError::CrashSignal(POSIX_SIGSEGV));
                         }
                     }
-                    let rhs_toks = tokenize(parts[NUM_ONE]);
+                    let rhs_toks = tokenize(parts[1]);
                     let mut p_rhs = ExprParser::with_context(&rhs_toks, env, source, call_depth);
                     let val = p_rhs.parse_expression()?;
                     env.insert(format!("{}[{}]", arr_name, idx), val);
@@ -948,17 +935,17 @@ pub fn execute_function_lines(
 
         if is_var_decl && trimmed.contains('=') && trimmed.ends_with(';') {
             let decl = trimmed.trim_end_matches(';');
-            let parts: Vec<&str> = decl.splitn(NUM_TWO, '=').collect();
-            if parts.len() == NUM_TWO {
-                let type_size = get_type_size(parts[NUM_ZERO]);
+            let parts: Vec<&str> = decl.splitn(SPLIT_ASSIGNMENT_PARTS, '=').collect();
+            if parts.len() == SPLIT_ASSIGNMENT_PARTS {
+                let type_size = get_type_size(parts[0]);
                 local_stack_bytes = local_stack_bytes.saturating_add(type_size);
                 if local_stack_bytes > MAX_STACK_FRAME_BYTES {
                     return Err(VerifyError::CrashSignal(POSIX_SIGSEGV));
                 }
-                let left_words: Vec<&str> = parts[NUM_ZERO].split_whitespace().collect();
+                let left_words: Vec<&str> = parts[0].split_whitespace().collect();
                 if let Some(var_name) = left_words.last() {
                     let cleaned_name = var_name.trim_start_matches('*').trim();
-                    let expr_toks = tokenize(parts[NUM_ONE]);
+                    let expr_toks = tokenize(parts[1]);
                     let mut parser = ExprParser::with_context(&expr_toks, env, source, call_depth);
                     let val = parser.parse_expression()?;
                     env.insert(cleaned_name.to_string(), val);
@@ -969,10 +956,10 @@ pub fn execute_function_lines(
 
         if !is_var_decl && trimmed.contains('=') && trimmed.ends_with(';') {
             let decl = trimmed.trim_end_matches(';');
-            let parts: Vec<&str> = decl.splitn(NUM_TWO, '=').collect();
-            if parts.len() == NUM_TWO {
-                let var_name = parts[NUM_ZERO].trim();
-                let expr_toks = tokenize(parts[NUM_ONE]);
+            let parts: Vec<&str> = decl.splitn(SPLIT_ASSIGNMENT_PARTS, '=').collect();
+            if parts.len() == SPLIT_ASSIGNMENT_PARTS {
+                let var_name = parts[0].trim();
+                let expr_toks = tokenize(parts[1]);
                 let mut parser = ExprParser::with_context(&expr_toks, env, source, call_depth);
                 let val = parser.parse_expression()?;
                 env.insert(var_name.to_string(), val);
@@ -981,18 +968,18 @@ pub fn execute_function_lines(
         }
     }
 
-    Ok(NUM_ZERO as i32)
+    Ok(0)
 }
 
 pub fn evaluate_c_source(source: &str, payload: i64) -> Result<i32, VerifyError> {
     let prefix = "volatile long long res = (long long)";
     let mut callees = Vec::new();
-    let mut search_idx = NUM_ZERO;
+    let mut search_idx = 0;
 
     while let Some(call_offset) = source[search_idx..].find(prefix) {
         let call_idx = search_idx + call_offset;
         let after_call = &source[call_idx + prefix.len()..];
-        let paren_open = after_call.find('(').unwrap_or(NUM_ZERO);
+        let paren_open = after_call.find('(').unwrap_or(0);
         let callee_name = after_call[..paren_open].trim().trim_start_matches('*');
         if !callee_name.is_empty()
             && callee_name != "haetae_fuzz_entry"
@@ -1000,16 +987,16 @@ pub fn evaluate_c_source(source: &str, payload: i64) -> Result<i32, VerifyError>
         {
             callees.push(callee_name.to_string());
         }
-        search_idx = call_idx + prefix.len() + NUM_ONE;
+        search_idx = call_idx + prefix.len() + 1;
     }
 
-    let (chosen_fn, p_val) = if callees.len() > NUM_ONE {
+    let (chosen_fn, p_val) = if callees.len() > 1 {
         let count = callees.len();
         let sel = (payload.unsigned_abs() as usize) % count;
         let p = (payload.unsigned_abs() as usize / count) as i64;
         (callees[sel].clone(), p)
-    } else if callees.len() == NUM_ONE {
-        (callees[NUM_ZERO].clone(), payload)
+    } else if callees.len() == 1 {
+        (callees[0].clone(), payload)
     } else {
         (String::new(), payload)
     };
@@ -1026,20 +1013,20 @@ pub fn evaluate_c_source(source: &str, payload: i64) -> Result<i32, VerifyError>
     env.insert("payload".to_string(), p_val);
     env.insert("p".to_string(), p_val);
     env.insert("p0".to_string(), p_val);
-    env.insert("p1".to_string(), p_val & NUM_ONE as i64);
-    env.insert("p2".to_string(), (p_val >> NUM_ONE) & NUM_ONE as i64);
+    env.insert("p1".to_string(), p_val & 1);
+    env.insert("p2".to_string(), (p_val >> 1) & 1);
     env.insert("base_val".to_string(), p_val);
-    env.insert("factor".to_string(), p_val & NUM_ONE as i64);
+    env.insert("factor".to_string(), p_val & 1);
     env.insert("a".to_string(), p_val);
-    env.insert("b".to_string(), p_val & NUM_ONE as i64);
+    env.insert("b".to_string(), p_val & 1);
     env.insert("cond".to_string(), p_val);
 
     for (p_idx, p_name) in func_params.iter().enumerate() {
-        if p_idx == NUM_ZERO {
+        if p_idx == 0 {
             env.insert(p_name.clone(), p_val);
         } else {
-            let shift = p_idx - NUM_ONE;
-            let v = (p_val >> shift) & NUM_ONE as i64;
+            let shift = p_idx - 1;
+            let v = (p_val >> shift) & 1;
             env.insert(p_name.clone(), v);
         }
     }
@@ -1053,5 +1040,5 @@ pub fn evaluate_c_source(source: &str, payload: i64) -> Result<i32, VerifyError>
         target_lines
     };
 
-    execute_function_lines(&lines_to_eval, &mut env, Some(source), NUM_ZERO)
+    execute_function_lines(&lines_to_eval, &mut env, Some(source), 0)
 }

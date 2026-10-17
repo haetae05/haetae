@@ -15,7 +15,8 @@ pub use fuzzer::{FuzzResult, FuzzerEngine};
 pub use headers::bundle_headers;
 pub use tcc_engine::{CompiledCode, TccEngine, VerifyError};
 pub use zydis_cfi::{
-    detect_isa, get_verifier, verify_cfi_for_isa, verify_cfi_integrity, verify_stack_frame_bound,
+    detect_isa, get_verifier, verify_cfi_for_isa, verify_cfi_integrity,
+    verify_stack_frame_4kb_bound, verify_stack_frame_4kb_bound_for_isa, verify_stack_frame_bound,
     verify_stack_frame_bound_for_isa, AArch64Verifier, IsaVerifier, RiscV64Verifier, TargetIsa,
-    X86_64Verifier,
+    X86_64Verifier, STACK_FRAME_4KB_BOUND,
 };

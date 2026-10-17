@@ -9,14 +9,39 @@ use std::path::{Path, PathBuf};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 
-const MIN_HTTP_REQUEST_LINE_PARTS: usize = 3;
-const CRLF_CRLF_LEN: usize = 4;
-const LF_LF_LEN: usize = 2;
+pub use crate::client::{ROUTE_AUTH_VERIFY, ROUTE_LICENSE_VERIFY};
+
+const HTTP_REQUEST_PARTS_SPEC: &[&str] = &["METHOD", "PATH", "VERSION"];
+const MIN_HTTP_REQUEST_LINE_PARTS: usize = HTTP_REQUEST_PARTS_SPEC.len();
+const CRLF_CRLF_DELIM: &str = "\r\n\r\n";
+const LF_LF_DELIM: &str = "\n\n";
+const CRLF_CRLF_LEN: usize = CRLF_CRLF_DELIM.len();
+const LF_LF_LEN: usize = LF_LF_DELIM.len();
+
+pub const ROUTE_HEALTH: &str = "/health";
+pub const ROUTE_API_HEALTH: &str = "/api/v1/health";
+pub const ROUTE_ROOT: &str = "/";
 
 pub const HTTP_STATUS_OK: u16 = HTTP_OK;
 pub const HTTP_STATUS_BAD_REQUEST: u16 = HTTP_BAD_REQUEST;
 pub const HTTP_STATUS_NOT_FOUND: u16 = HTTP_NOT_FOUND;
 pub const HTTP_STATUS_INTERNAL_ERROR: u16 = HTTP_INTERNAL_ERROR;
+
+pub const STATUS_LINE_OK: &str = "HTTP/1.1 200 OK";
+pub const STATUS_LINE_BAD_REQUEST: &str = "HTTP/1.1 400 Bad Request";
+pub const STATUS_LINE_NOT_FOUND: &str = "HTTP/1.1 404 Not Found";
+pub const STATUS_LINE_INTERNAL_ERROR: &str = "HTTP/1.1 500 Internal Server Error";
+
+pub const HEADER_CORS_ORIGIN: &str = "Access-Control-Allow-Origin: *";
+pub const HEADER_CORS_METHODS: &str = "Access-Control-Allow-Methods: GET, POST, HEAD, OPTIONS";
+pub const HEADER_CORS_HEADERS: &str = "Access-Control-Allow-Headers: Content-Type, Authorization";
+pub const HEADER_CONNECTION_CLOSE: &str = "Connection: close";
+
+pub const JSON_ERROR_BAD_REQUEST: &str = "{\"error\": \"Bad Request\"}";
+pub const JSON_ERROR_INVALID_BODY: &str = "{\"error\": \"Invalid JSON body\"}";
+pub const JSON_ERROR_NOT_FOUND: &str = "{\"error\": \"Not Found\"}";
+pub const JSON_HEALTH_PAYLOAD: &str =
+    "{\"status\": \"healthy\", \"service\": \"haetae-license-server\"}";
 pub const SERVER_PORT_DEFAULT: u16 = SERVER_PORT;
 pub const BUFFER_CHUNK_SIZE: usize = SERVER_BUFFER_CHUNK_SIZE;
 
@@ -323,10 +348,15 @@ async fn serve_binary_file(
     let file_len = metadata.len();
 
     let header = format!(
-        "HTTP/1.1 200 OK\r\nAccess-Control-Allow-Origin: *\r\nAccess-Control-Allow-Methods: GET, POST, HEAD, OPTIONS\r\nAccess-Control-Allow-Headers: Content-Type, Authorization\r\nContent-Type: {}\r\nContent-Disposition: attachment; filename=\"{}\"\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+        "{}\r\n{}\r\n{}\r\n{}\r\nContent-Type: {}\r\nContent-Disposition: attachment; filename=\"{}\"\r\nContent-Length: {}\r\n{}\r\n\r\n",
+        STATUS_LINE_OK,
+        HEADER_CORS_ORIGIN,
+        HEADER_CORS_METHODS,
+        HEADER_CORS_HEADERS,
         content_type,
         filename,
-        file_len
+        file_len,
+        HEADER_CONNECTION_CLOSE
     );
 
     stream
@@ -375,9 +405,14 @@ async fn serve_static_file(
     let file_len = metadata.len();
 
     let header = format!(
-        "HTTP/1.1 200 OK\r\nAccess-Control-Allow-Origin: *\r\nAccess-Control-Allow-Methods: GET, POST, HEAD, OPTIONS\r\nAccess-Control-Allow-Headers: Content-Type, Authorization\r\nContent-Type: {}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+        "{}\r\n{}\r\n{}\r\n{}\r\nContent-Type: {}\r\nContent-Length: {}\r\n{}\r\n\r\n",
+        STATUS_LINE_OK,
+        HEADER_CORS_ORIGIN,
+        HEADER_CORS_METHODS,
+        HEADER_CORS_HEADERS,
         mime_type,
-        file_len
+        file_len,
+        HEADER_CONNECTION_CLOSE
     );
 
     stream
@@ -468,27 +503,157 @@ pub async fn verify_lemonsqueezy_license(license_key: &str, instance_name: &str)
     false
 }
 
+pub fn resolve_license_secret() -> String {
+    let secret = crate::crypto::get_license_secret();
+    let cleaned = secret.trim().trim_matches('"').trim_matches('\'');
+    if !cleaned.is_empty() {
+        return cleaned.to_string();
+    }
+    if let Ok(alt) = std::env::var("HAETAE_AUTH_SECRET") {
+        let cleaned_alt = alt.trim().trim_matches('"').trim_matches('\'');
+        if !cleaned_alt.is_empty() {
+            return cleaned_alt.to_string();
+        }
+    }
+    String::new()
+}
+
+pub async fn handle_verify(body_str: &str) -> String {
+    let req_data: Result<LicenseRequest, _> = serde_json::from_str(body_str.trim());
+    match req_data {
+        Ok(lic) => {
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_secs())
+                .unwrap_or(DEFAULT_LICENSE_EXPIRY_TIMESTAMP);
+            let expiry = now + (LICENSE_VALIDITY_DAYS * SECS_PER_DAY);
+            let secret = resolve_license_secret();
+
+            let mut verified_tier = if secret.is_empty() {
+                Err(AuthError::InvalidLicense)
+            } else {
+                crate::crypto::verify_license_key(&lic.license_key, &secret)
+            };
+
+            if verified_tier.is_err()
+                && verify_lemonsqueezy_license(&lic.license_key, &lic.machine_id).await
+            {
+                verified_tier = Ok(LicenseTier::Pro);
+            }
+
+            let resp_data = match verified_tier {
+                Ok(tier) => {
+                    let token = if secret.is_empty() {
+                        None
+                    } else {
+                        Some(crate::crypto::generate_license_token(
+                            &lic.license_key,
+                            &lic.machine_id,
+                            tier,
+                            expiry,
+                            &secret,
+                        ))
+                    };
+                    LicenseResponse {
+                        valid: true,
+                        tier,
+                        expires_at: expiry,
+                        token,
+                    }
+                }
+                Err(_) => LicenseResponse {
+                    valid: false,
+                    tier: LicenseTier::Community,
+                    expires_at: expiry,
+                    token: None,
+                },
+            };
+            let json = serde_json::to_string(&resp_data).unwrap_or_default();
+            build_http_response(HTTP_STATUS_OK, &json)
+        }
+        Err(_) => build_http_response(HTTP_STATUS_BAD_REQUEST, JSON_ERROR_INVALID_BODY),
+    }
+}
+
 async fn handle_connection(
     mut stream: TcpStream,
     web_dir: Option<PathBuf>,
 ) -> Result<(), AuthError> {
-    let mut buf = vec![0u8; BUFFER_CAPACITY_BYTES];
-    let n = stream
-        .read(&mut buf)
-        .await
-        .map_err(|e| AuthError::Network(e.to_string()))?;
+    let mut header_buf = Vec::new();
+    let mut header_end_idx = None;
+    let mut delim_len = 0;
 
-    if n == 0 {
+    let mut temp_chunk = [0u8; BUFFER_CAPACITY_BYTES];
+    loop {
+        let n = stream
+            .read(&mut temp_chunk)
+            .await
+            .map_err(|e| AuthError::Network(e.to_string()))?;
+        if n == 0 {
+            break;
+        }
+        header_buf.extend_from_slice(&temp_chunk[0..n]);
+
+        if let Some(pos) = header_buf
+            .windows(CRLF_CRLF_LEN)
+            .position(|w| w == b"\r\n\r\n")
+        {
+            header_end_idx = Some(pos);
+            delim_len = CRLF_CRLF_LEN;
+            break;
+        }
+        if let Some(pos) = header_buf.windows(LF_LF_LEN).position(|w| w == b"\n\n") {
+            header_end_idx = Some(pos);
+            delim_len = LF_LF_LEN;
+            break;
+        }
+    }
+
+    if header_buf.is_empty() {
         return Ok(());
     }
 
-    let req_str = String::from_utf8_lossy(&buf[0..n]);
-    let mut lines = req_str.lines();
+    let (headers_str, initial_body) = if let Some(end_idx) = header_end_idx {
+        let body_start = end_idx + delim_len;
+        let h_str = String::from_utf8_lossy(&header_buf[0..end_idx]).to_string();
+        let b_slice = header_buf[body_start..].to_vec();
+        (h_str, b_slice)
+    } else {
+        (String::from_utf8_lossy(&header_buf).to_string(), Vec::new())
+    };
+
+    let mut content_length: usize = 0;
+    for line in headers_str.lines() {
+        let lower = line.to_lowercase();
+        if let Some(val_str) = lower.strip_prefix("content-length:") {
+            if let Ok(len) = val_str.trim().parse::<usize>() {
+                content_length = len;
+            }
+        }
+    }
+
+    let mut body_buf = initial_body;
+    while body_buf.len() < content_length {
+        let remaining = content_length - body_buf.len();
+        let to_read = remaining.min(BUFFER_CAPACITY_BYTES);
+        let n = stream
+            .read(&mut temp_chunk[0..to_read])
+            .await
+            .map_err(|e| AuthError::Network(e.to_string()))?;
+        if n == 0 {
+            break;
+        }
+        body_buf.extend_from_slice(&temp_chunk[0..n]);
+    }
+
+    let body_str = String::from_utf8_lossy(&body_buf);
+
+    let mut lines = headers_str.lines();
     let first_line = lines.next().unwrap_or_default();
     let parts: Vec<&str> = first_line.split_whitespace().collect();
 
     if parts.len() < MIN_HTTP_REQUEST_LINE_PARTS {
-        let resp = build_http_response(HTTP_STATUS_BAD_REQUEST, "{\"error\": \"Bad Request\"}");
+        let resp = build_http_response(HTTP_STATUS_BAD_REQUEST, JSON_ERROR_BAD_REQUEST);
         let _ = stream.write_all(resp.as_bytes()).await;
         return Ok(());
     }
@@ -496,11 +661,16 @@ async fn handle_connection(
     let method = parts[0];
     let raw_path = parts[1];
     let path = raw_path.split('?').next().unwrap_or(raw_path);
+    let normalized_path = path.strip_suffix('/').unwrap_or(path);
 
     if method == "OPTIONS" {
         let cors_resp = format!(
-            "HTTP/1.1 200 OK\r\nAccess-Control-Allow-Origin: *\r\nAccess-Control-Allow-Methods: GET, POST, HEAD, OPTIONS\r\nAccess-Control-Allow-Headers: Content-Type, Authorization\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
-            0
+            "{}\r\n{}\r\n{}\r\n{}\r\nContent-Length: 0\r\n{}\r\n\r\n",
+            STATUS_LINE_OK,
+            HEADER_CORS_ORIGIN,
+            HEADER_CORS_METHODS,
+            HEADER_CORS_HEADERS,
+            HEADER_CONNECTION_CLOSE
         );
         let _ = stream.write_all(cors_resp.as_bytes()).await;
         let _ = stream.flush().await;
@@ -508,79 +678,38 @@ async fn handle_connection(
         return Ok(());
     }
 
-    if method == "POST" && path == "/api/v1/license/verify" {
-        let body = if let Some(idx) = req_str.find("\r\n\r\n") {
-            &req_str[idx + CRLF_CRLF_LEN..]
-        } else if let Some(idx) = req_str.find("\n\n") {
-            &req_str[idx + LF_LF_LEN..]
-        } else {
-            ""
-        };
-
-        let req_data: Result<LicenseRequest, _> = serde_json::from_str(body.trim());
-        let resp_str = match req_data {
-            Ok(lic) => {
-                let now = std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .map(|d| d.as_secs())
-                    .unwrap_or(DEFAULT_LICENSE_EXPIRY_TIMESTAMP);
-                let expiry = now + (LICENSE_VALIDITY_DAYS * SECS_PER_DAY);
-                let secret = crate::crypto::get_license_secret();
-
-                let mut verified_tier =
-                    crate::crypto::verify_license_key(&lic.license_key, &secret);
-                if verified_tier.is_err()
-                    && verify_lemonsqueezy_license(&lic.license_key, &lic.machine_id).await
-                {
-                    verified_tier = Ok(LicenseTier::Pro);
-                }
-                let resp_data = match verified_tier {
-                    Ok(tier) => {
-                        let token = crate::crypto::generate_license_token(
-                            &lic.license_key,
-                            &lic.machine_id,
-                            tier,
-                            expiry,
-                            &secret,
-                        );
-                        LicenseResponse {
-                            valid: true,
-                            tier,
-                            expires_at: expiry,
-                            token: Some(token),
-                        }
-                    }
-                    Err(_) => LicenseResponse {
-                        valid: false,
-                        tier: LicenseTier::Community,
-                        expires_at: expiry,
-                        token: None,
-                    },
-                };
-                let json = serde_json::to_string(&resp_data).unwrap_or_default();
-                build_http_response(HTTP_STATUS_OK, &json)
-            }
-            Err(_) => build_http_response(
-                HTTP_STATUS_BAD_REQUEST,
-                "{\"error\": \"Invalid JSON body\"}",
-            ),
-        };
-
+    if method == "POST"
+        && (path == ROUTE_AUTH_VERIFY
+            || path == ROUTE_LICENSE_VERIFY
+            || normalized_path == ROUTE_AUTH_VERIFY
+            || normalized_path == ROUTE_LICENSE_VERIFY)
+    {
+        let resp_str = handle_verify(&body_str).await;
         let _ = stream.write_all(resp_str.as_bytes()).await;
         let _ = stream.flush().await;
         let _ = stream.shutdown().await;
         return Ok(());
     }
 
-    if (method == "GET" || method == "HEAD") && (path == "/health" || path == "/api/v1/health") {
-        let body = "{\"status\": \"healthy\", \"service\": \"haetae-license-server\"}";
+    if (method == "GET" || method == "HEAD")
+        && (path == ROUTE_HEALTH
+            || path == ROUTE_API_HEALTH
+            || normalized_path == ROUTE_HEALTH
+            || normalized_path == ROUTE_API_HEALTH)
+    {
         let resp = format!(
-            "HTTP/1.1 200 OK\r\nAccess-Control-Allow-Origin: *\r\nAccess-Control-Allow-Methods: GET, POST, HEAD, OPTIONS\r\nAccess-Control-Allow-Headers: Content-Type, Authorization\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
-            body.len()
+            "{}\r\n{}\r\n{}\r\n{}\r\nContent-Type: {}\r\nContent-Length: {}\r\n{}\r\n\r\n",
+            STATUS_LINE_OK,
+            HEADER_CORS_ORIGIN,
+            HEADER_CORS_METHODS,
+            HEADER_CORS_HEADERS,
+            MIME_JSON,
+            JSON_HEALTH_PAYLOAD.len(),
+            HEADER_CONNECTION_CLOSE
         );
         let _ = stream.write_all(resp.as_bytes()).await;
         if method == "GET" {
-            let _ = stream.write_all(body.as_bytes()).await;
+            let _ = stream.write_all(JSON_HEALTH_PAYLOAD.as_bytes()).await;
         }
         let _ = stream.flush().await;
         let _ = stream.shutdown().await;
@@ -607,7 +736,7 @@ async fn handle_connection(
         if let Some(ref dir) = web_dir {
             let clean_path = path.trim_start_matches('/');
             if clean_path.contains("..") {
-                let resp = build_http_response(HTTP_NOT_FOUND, "{\"error\": \"Not Found\"}");
+                let resp = build_http_response(HTTP_STATUS_NOT_FOUND, JSON_ERROR_NOT_FOUND);
                 let _ = stream.write_all(resp.as_bytes()).await;
                 let _ = stream.flush().await;
                 let _ = stream.shutdown().await;
@@ -651,15 +780,20 @@ async fn handle_connection(
             }
         }
 
-        if path == "/" {
-            let body = "{\"status\": \"healthy\", \"service\": \"haetae-license-server\"}";
+        if path == ROUTE_ROOT {
             let resp = format!(
-                "HTTP/1.1 200 OK\r\nAccess-Control-Allow-Origin: *\r\nAccess-Control-Allow-Methods: GET, POST, HEAD, OPTIONS\r\nAccess-Control-Allow-Headers: Content-Type, Authorization\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
-                body.len()
+                "{}\r\n{}\r\n{}\r\n{}\r\nContent-Type: {}\r\nContent-Length: {}\r\n{}\r\n\r\n",
+                STATUS_LINE_OK,
+                HEADER_CORS_ORIGIN,
+                HEADER_CORS_METHODS,
+                HEADER_CORS_HEADERS,
+                MIME_JSON,
+                JSON_HEALTH_PAYLOAD.len(),
+                HEADER_CONNECTION_CLOSE
             );
             let _ = stream.write_all(resp.as_bytes()).await;
             if method == "GET" {
-                let _ = stream.write_all(body.as_bytes()).await;
+                let _ = stream.write_all(JSON_HEALTH_PAYLOAD.as_bytes()).await;
             }
             let _ = stream.flush().await;
             let _ = stream.shutdown().await;
@@ -667,7 +801,7 @@ async fn handle_connection(
         }
     }
 
-    let resp = build_http_response(HTTP_STATUS_NOT_FOUND, "{\"error\": \"Not Found\"}");
+    let resp = build_http_response(HTTP_STATUS_NOT_FOUND, JSON_ERROR_NOT_FOUND);
     let _ = stream.write_all(resp.as_bytes()).await;
     let _ = stream.flush().await;
     let _ = stream.shutdown().await;
@@ -676,16 +810,21 @@ async fn handle_connection(
 
 pub fn build_http_response(status: u16, json_body: &str) -> String {
     let status_line = match status {
-        HTTP_STATUS_OK => "HTTP/1.1 200 OK",
-        HTTP_STATUS_BAD_REQUEST => "HTTP/1.1 400 Bad Request",
-        HTTP_STATUS_NOT_FOUND => "HTTP/1.1 404 Not Found",
-        _ => "HTTP/1.1 500 Internal Server Error",
+        HTTP_STATUS_OK => STATUS_LINE_OK,
+        HTTP_STATUS_BAD_REQUEST => STATUS_LINE_BAD_REQUEST,
+        HTTP_STATUS_NOT_FOUND => STATUS_LINE_NOT_FOUND,
+        _ => STATUS_LINE_INTERNAL_ERROR,
     };
 
     format!(
-        "{}\r\nAccess-Control-Allow-Origin: *\r\nAccess-Control-Allow-Methods: GET, POST, HEAD, OPTIONS\r\nAccess-Control-Allow-Headers: Content-Type, Authorization\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+        "{}\r\n{}\r\n{}\r\n{}\r\nContent-Type: {}\r\nContent-Length: {}\r\n{}\r\n\r\n{}",
         status_line,
+        HEADER_CORS_ORIGIN,
+        HEADER_CORS_METHODS,
+        HEADER_CORS_HEADERS,
+        MIME_JSON,
         json_body.len(),
+        HEADER_CONNECTION_CLOSE,
         json_body
     )
 }

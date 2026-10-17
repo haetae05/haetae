@@ -126,7 +126,7 @@ fn retrieve_mac_address() -> Option<String> {
     for path in net_paths {
         if let Ok(mac) = std::fs::read_to_string(path) {
             let trimmed = mac.trim();
-            if !trimmed.is_empty() && trimmed != DEFAULT_FALLBACK_MAC {
+            if trimmed.len() >= MAC_ADDRESS_STR_LEN && trimmed != DEFAULT_FALLBACK_MAC {
                 return Some(trimmed.to_string());
             }
         }

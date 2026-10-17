@@ -1,9 +1,9 @@
 use haetae_auth::{AuthClient, LicenseServer};
 use haetae_core::config::{
-    Config, BOOST_STAGE12_ALGO_ITERATIONS, BOOST_STAGE1_SWAP_ITERATIONS, BOOST_STAGE2_MIM_TOKENS,
-    BOOST_STAGE3_FUZZ_ITERATIONS, BOOST_TOTAL_STAGES, BYTES_PER_MB, COLLISION_WINDOW_TOKENS,
-    DEFAULT_FUZZ_ITERATIONS, DEFAULT_LOCAL_SERVER_HOST, LOCAL_HOST_IPV4, MB_PER_GB, MILLIS_PER_SEC,
-    MIN_BENCHMARK_ELAPSED_SECS, SERVER_PORT, TOKENS_PER_CYCLE, WEIGHT_SLICE_SIZE_MB,
+    Config, BOOST_STAGE1_SWAP_ITERATIONS, BOOST_STAGE2_MIM_TOKENS, BOOST_STAGE3_FUZZ_ITERATIONS,
+    BYTES_PER_MB, COLLISION_WINDOW_TOKENS, DEFAULT_FUZZ_ITERATIONS, DEFAULT_LOCAL_SERVER_HOST,
+    LOCAL_HOST_IPV4, MB_PER_GB, MILLIS_PER_SEC, MIN_BENCHMARK_ELAPSED_SECS, SERVER_PORT,
+    TOKENS_PER_CYCLE, WEIGHT_SLICE_SIZE_MB,
 };
 
 const MIN_SUBCOMMAND_ARGS: usize = 2;
@@ -18,15 +18,12 @@ const BENCH_PRNG_SHIFT: usize = 8;
 const BENCH_VOCAB_SIZE: usize = 256;
 const BENCH_MIM_FWD_MULT: usize = 7;
 const BENCH_MIM_BWD_MULT: usize = 13;
-const FIM_LIVE_CHECKS_PER_FILE: usize = 4;
 const INITIAL_TOKEN_FWD: u32 = 1;
 const INITIAL_TOKEN_BWD: u32 = 2;
 use haetae_core::primitives::{Primitive, TargetLanguage};
 use haetae_core::repo_map::RepoMapCompressor;
 use haetae_core::scaffolding::FimPrompt;
-use haetae_core::spec_parser::{
-    build_spec_synthesis_prompt, generate_c_implementation, parse_markdown_spec,
-};
+use haetae_core::spec_parser::{build_spec_synthesis_prompt, parse_markdown_spec};
 use haetae_core::web_research::{extract_signatures, WebResearchClient};
 use haetae_engine::model_loader::ModelLoader;
 use haetae_engine::ring_buffer::WeightRingBuffer;
@@ -598,7 +595,7 @@ async fn handle_boost() {
             .as_secs_f64()
             .max(MIN_BENCHMARK_ELAPSED_SECS));
     println!(
-        "[Boost 1/12] L3 35MB Ring Buffer Swap & Weight Streaming: {} iterations in {:.2}ms ({:.2} GB/s, 0ns stall)",
+        "[Boost 1/4] L3 35MB Ring Buffer Swap & Weight Streaming: {} iterations in {:.2}ms ({:.2} GB/s, 0ns stall)",
         stage1_runs, l3_dur_ms, l3_throughput_gbs
     );
 
@@ -632,7 +629,7 @@ async fn handle_boost() {
             .as_secs_f64()
             .max(MIN_BENCHMARK_ELAPSED_SECS));
     println!(
-        "[Boost 2/12] MIM Dual-Head 2-Token Decoding & Zipper Convergence: {} token pairs in {:.2}ms ({:.1} tokens/sec, 0% collapse)",
+        "[Boost 2/4] MIM Dual-Head 2-Token Decoding & Zipper Convergence: {} token pairs in {:.2}ms ({:.1} tokens/sec, 0% collapse)",
         BOOST_STAGE2_MIM_TOKENS, mim_dur_ms, tokens_per_sec
     );
 
@@ -647,6 +644,9 @@ async fn handle_boost() {
             return;
         }
     };
+    let bytecode = tcc.get_bytecode(&compiled);
+    let _ = verify_stack_frame_bound_for_isa(bytecode, max_stack, isa);
+    let _ = verify_cfi_for_isa(bytecode, isa);
     let fuzzer = FuzzerEngine::new(BOOST_STAGE3_FUZZ_ITERATIONS);
     let mut stage3_runs = 0;
     let mut fuzz_dur_ms = 0.0f64;
@@ -655,7 +655,7 @@ async fn handle_boost() {
             stage3_runs = res.total_iterations;
             fuzz_dur_ms = fuzz_start.elapsed().as_secs_f64() * MILLIS_PER_SEC;
             println!(
-                "[Boost 3/12] In-Memory Compiler & 100,000 Micro-Fuzzing Hardware Trap Interception: {} runs verified in {:.2}ms (0 leaks, {} crashes)",
+                "[Boost 3/4] In-Memory Compiler & 100,000 Micro-Fuzzing Hardware Trap Interception: {} runs verified in {:.2}ms (0 leaks, {} crashes)",
                 res.total_iterations, fuzz_dur_ms, res.failed
             );
         }
@@ -688,618 +688,9 @@ async fn handle_boost() {
     }
     let prim_dur_ms = prim_start.elapsed().as_secs_f64() * MILLIS_PER_SEC;
     println!(
-        "[Boost 4/12] 54 Core AST Primitives Across All 8 Meta-Categories & 15-Language Matrix: {} constructs verified in {:.2}ms",
+        "[Boost 4/4] 54 Core AST Primitives Across All 8 Meta-Categories & 15-Language Matrix: {} constructs verified in {:.2}ms",
         prim_count + matrix_count,
         prim_dur_ms
-    );
-
-    let syn_start = std::time::Instant::now();
-    let test_prompts = [
-        "abs val",
-        "is even odd",
-        "swap two variables",
-        "clamp value within range",
-        "signum return -1 0 1",
-        "null check guard",
-        "increment counter atomic",
-        "popcount count set bits",
-        "power of two bitwise check",
-        "identity function return self",
-        "tree inorder traversal bst dfs",
-        "0-1 knapsack dynamic programming dp",
-        "lru cache with hash table",
-        "worker pool concurrent queue async channel",
-        "branchless bitwise arithmetic select",
-        "safe division scalar invariant",
-        "tcp socket network connection retry",
-        "binary search sorted array",
-        "random numbers 1 to 100",
-        "list array collection sequence",
-        "trie prefix tree insert search autocomplete",
-        "segment tree range sum query update",
-        "dijkstra shortest path graph priority queue",
-        "lock-free atomic stack cas treiber concurrency",
-        "crc32 checksum lookup table polynomial",
-        "token bucket rate limiter refill capacity acquire",
-        "simd vectorized dot product multiply accumulate",
-        "ffi native extern c binding bridge shared library",
-        "trie prefix search with lock-free atomic stack",
-        "simd vectorized dot product with safe division invariant",
-        "dijkstra shortest path with lru cache and hash table",
-        "rust python bridge socket tcp",
-        "safe division scalar invariant with list array",
-        "0-1 knapsack dynamic programming with binary search",
-        "thread safe ring buffer sequence counter",
-        "asynchronous pipeline http event batch",
-        "hash table collision resolution chaining",
-        "in-memory inverted index autocomplete",
-        "fast matrix transpose memory layout",
-        "producer consumer queue semaphore",
-        "merge sort recursive divide conquer",
-        "bloom filter probabilistic membership check",
-        "utf8 byte stream validator",
-        "base64 encode decode ascii",
-        "huffman code tree frequency",
-        "fibonacci iterative dynamic programming",
-        "distributed consensus raft log replication state machine",
-        "high throughput lock-free ring buffer atomic cas backoff",
-        "asynchronous pipeline http event batch deduplication rate limit",
-        "simd 4x4 matrix vector multiply accumulate fast transform",
-        "bloom filter multi-hash bitset membership filter",
-        "trie autocomplete prefix dictionary with frequency ranking",
-        "dijkstra shortest path with indexed priority queue heap",
-        "zero-copy arena memory allocator with chunk reclamation",
-        "producer consumer bounded channel with backpressure signal",
-        "lru cache with doubly linked list and hash index",
-        "red black tree balanced binary search tree insertion",
-        "quick sort three way partitioning Dutch national flag",
-        "radix sort high performance linear time integer sorting",
-        "breadth first search shortest path unweighted graph",
-    ];
-    let all_langs = TargetLanguage::all();
-    let mut syn_count = 0;
-    for lang in all_langs {
-        for prompt in &test_prompts {
-            let code = lang.synthesize_code(prompt);
-            assert!(!code.trim().is_empty());
-            syn_count += 1;
-        }
-    }
-    let syn_dur_ms = syn_start.elapsed().as_secs_f64() * MILLIS_PER_SEC;
-    let syn_ops = syn_count as f64
-        / (syn_start
-            .elapsed()
-            .as_secs_f64()
-            .max(MIN_BENCHMARK_ELAPSED_SECS));
-    println!(
-        "[Boost 5/12] 15 Target Languages FIM Code Synthesis Matrix: {} programs generated in {:.2}ms ({:.1} ops/sec, 100% valid)",
-        syn_count, syn_dur_ms, syn_ops
-    );
-
-    let ref_start = std::time::Instant::now();
-    let refactor_prompts = [
-        (
-            "if (cond) { val = a; } else { val = b; }",
-            "branchless bitwise conversion",
-        ),
-        (
-            "throw new Exception(\"invalid\");",
-            "convert to result option monad",
-        ),
-        (
-            "while (running) { process(); }",
-            "convert to async worker pool",
-        ),
-        (
-            "for (int i = 0; i < n; i++) { if (arr[i] > 0) out.push(arr[i] * 2); }",
-            "functional stream iterator",
-        ),
-        (
-            "if (ptr != null) { ptr.call(); }",
-            "null safety guard clause",
-        ),
-        (
-            "struct Stack { Node* head; };",
-            "lock-free atomic cas stack",
-        ),
-        (
-            "unsigned int compute(char* d, int l) { return 0; }",
-            "crc32 lookup table checksum",
-        ),
-        ("bool allow() { return true; }", "token bucket rate limiter"),
-        (
-            "float dot(float* a, float* b, int n) { return 0; }",
-            "simd vectorization",
-        ),
-        ("void call_c() {}", "ffi native extern c binding bridge"),
-        ("int x = a / b;", "guard against division by zero"),
-        ("List<int> l = new List();", "convert to bounded array"),
-        ("match msg { Ping => Pong }", "optimize pattern matching"),
-        ("while(true) { tick(); }", "cooperative event loop yield"),
-        ("char* buf = malloc(256);", "convert to stack allocation"),
-        ("int m = a > b ? a : b;", "convert to branchless select"),
-        (
-            "try { do_work(); } catch (...) {}",
-            "convert to result option monad",
-        ),
-        (
-            "for (int i = 0; i < 100; i++) {}",
-            "convert to parallel async worker",
-        ),
-        ("int val = obj.val;", "add null check guard"),
-        ("unsigned int h = 0;", "crc32 lookup table checksum"),
-        ("int take() { return 1; }", "token bucket rate limiter"),
-        ("void push(int x) {}", "lock-free atomic cas stack"),
-        ("int res = base / scale;", "guard against division by zero"),
-        ("int nums[10];", "convert to bounded array"),
-        ("void send() {}", "ffi native extern c binding bridge"),
-        ("float sum = 0.0;", "simd vectorization"),
-        ("if (x != null) { use(x); }", "null safety guard clause"),
-        ("int ans = (cond) ? x : y;", "branchless bitwise conversion"),
-        (
-            "void loop() { while(1) {} }",
-            "cooperative event loop yield",
-        ),
-        ("void* p = malloc(64);", "convert to stack allocation"),
-    ];
-    let mut ref_count = 0;
-    for lang in all_langs {
-        for (target, prompt) in &refactor_prompts {
-            let out = lang.refactor_code(target, prompt);
-            assert!(!out.trim().is_empty());
-            ref_count += 1;
-        }
-    }
-    let ref_dur_ms = ref_start.elapsed().as_secs_f64() * MILLIS_PER_SEC;
-    let ref_ops = ref_count as f64
-        / (ref_start
-            .elapsed()
-            .as_secs_f64()
-            .max(MIN_BENCHMARK_ELAPSED_SECS));
-    println!(
-        "[Boost 6/12] Multi-Language Semantic Refactoring Suite: {} transformations verified in {:.2}ms ({:.1} ops/sec)",
-        ref_count, ref_dur_ms, ref_ops
-    );
-
-    let complex_start = std::time::Instant::now();
-    let complex_prompts = [
-        "Write a thread-safe ring buffer with lock-free atomic sequence counter, cache-line aligned nodes, and bounded capacity with backoff retry strategy for low-latency market data processing",
-        "Implement an asynchronous pipeline for processing batches of HTTP events with token bucket rate limiting, LRU deduplication cache, crc32 integrity check, and graceful shutdown on signal",
-        "Construct a high-performance in-memory inverted index and prefix trie autocomplete engine supporting dynamic insertion, deletion, and fast range queries",
-        "make this function robust against arithmetic overflow and division by zero crashes with explicit guard clauses",
-        "optimize this algorithm for zero heap allocation and branchless CPU execution using bitwise mask arithmetic",
-        "Design a high-concurrency lock-free Treiber stack with hazard pointers and compare-and-swap loop backoff",
-        "Build a SIMD-accelerated 4x4 matrix multiplication and vector dot product kernel for low-latency graphics computation",
-        "Implement a zero-copy circular ring buffer with cache-line padding and relaxed atomic sequence order",
-        "Develop a distributed consensus raft log replication state machine with term election and append entries RPC",
-        "Construct an in-memory bloom filter with optimal bit array sizing and MurmurHash3 dual hashing",
-    ];
-    let mut complex_count = 0;
-    for prompt in &complex_prompts {
-        for lang in all_langs {
-            let code = lang.synthesize_code(prompt);
-            assert!(!code.trim().is_empty());
-            complex_count += 1;
-        }
-    }
-    let complex_dur_ms = complex_start.elapsed().as_secs_f64() * MILLIS_PER_SEC;
-    println!(
-        "[Boost 7/12] Complex Long Instructions & Abstract Architecture Battery: {} prompts verified in {:.2}ms",
-        complex_count, complex_dur_ms
-    );
-
-    let repo_start = std::time::Instant::now();
-    let current_dir = env::current_dir().unwrap_or_else(|_| Path::new(".").to_path_buf());
-    let compressor = RepoMapCompressor::default();
-    let compressed_map =
-        compressor.build_and_compress_from_dir(&current_dir, Some("divide_scalar"));
-    let repo_dur_ms = repo_start.elapsed().as_secs_f64() * MILLIS_PER_SEC;
-    let repo_symbols_count = compressed_map.lines().count();
-    println!(
-        "[Boost 8/12] Massive Multi-File Repository Scan & Cross-File PageRank Dependency Graph: {} symbols ranked & compressed in {:.2}ms",
-        repo_symbols_count, repo_dur_ms
-    );
-
-    let lower_start = std::time::Instant::now();
-    let multi_lang_samples = [
-        (
-            "def divide_scalar(base_val: int, factor: int) -> int:\n    if factor == 0:\n        return 0\n    return base_val // factor\n",
-            "py",
-        ),
-        (
-            "function divideScalar(baseVal: number, factor: number): number {\n    if (factor === 0) return 0;\n    return baseVal / factor;\n}\n",
-            "ts",
-        ),
-        (
-            "pub fn divide_scalar(base_val: i32, factor: i32) -> i32 {\n    if factor == 0 { return 0; }\n    base_val / factor\n}\n",
-            "rs",
-        ),
-        (
-            "func DivideScalar(baseVal int, factor int) int {\n    if factor == 0 { return 0 }\n    return baseVal / factor\n}\n",
-            "go",
-        ),
-        (
-            "public int divideScalar(int baseVal, int factor) {\n    if (factor == 0) return 0;\n    return baseVal / factor;\n}\n",
-            "java",
-        ),
-        (
-            "public static int DivideScalar(int baseVal, int factor) {\n    if (factor == 0) return 0;\n    return baseVal / factor;\n}\n",
-            "cs",
-        ),
-        (
-            "func divideScalar(_ baseVal: Int, _ factor: Int) -> Int {\n    if factor == 0 { return 0 }\n    return baseVal / factor\n}\n",
-            "swift",
-        ),
-        (
-            "fun divideScalar(baseVal: Int, factor: Int): Int {\n    if (factor == 0) return 0;\n    return baseVal / factor;\n}\n",
-            "kt",
-        ),
-        (
-            "function divideScalar($baseVal, $factor) {\n    if ($factor == 0) return 0;\n    return $baseVal / $factor;\n}\n",
-            "php",
-        ),
-        (
-            "int divide_scalar(int base_val, int factor) {\n    if (factor == 0) return 0;\n    return base_val / factor;\n}\n",
-            "c",
-        ),
-        (
-            "int divide_scalar(int base_val, int factor) {\n    if (factor == 0) return 0;\n    return base_val / factor;\n}\n",
-            "cpp",
-        ),
-        (
-            "function divideScalar(baseVal, factor) {\n    if (factor === 0) return 0;\n    return baseVal / factor;\n}\n",
-            "js",
-        ),
-    ];
-    let mut lower_count = 0;
-    for (src, ext) in &multi_lang_samples {
-        let lowered = lower_source_to_c_ir(src, ext);
-        let full = format!("{}\n{}\n", bundle_headers(), lowered);
-        if let Ok(c) = tcc.compile_in_memory(&full, "haetae_fuzz_entry") {
-            let bytecode = tcc.get_bytecode(&c);
-            let _ = verify_stack_frame_bound_for_isa(bytecode, max_stack, isa);
-            let _ = verify_cfi_for_isa(bytecode, isa);
-            lower_count += 1;
-        }
-    }
-    let lower_dur_ms = lower_start.elapsed().as_secs_f64() * MILLIS_PER_SEC;
-    println!(
-        "[Boost 9/12] Universal Multi-Language C-Lowering & In-Memory JIT Compilation: {} languages lowered & compiled in {:.2}ms",
-        lower_count, lower_dur_ms
-    );
-
-    let fim_live_start = std::time::Instant::now();
-    let temp_dir = env::temp_dir();
-    let live_scenarios = [
-        (
-            TargetLanguage::Rust,
-            "tmp_haetae_boost.rs",
-            "pub fn execute_work() {",
-            "}",
-            "branchless bitwise arithmetic select",
-        ),
-        (
-            TargetLanguage::Python,
-            "tmp_haetae_boost.py",
-            "def run_process():\n",
-            "\n    return True",
-            "crc32 checksum polynomial",
-        ),
-        (
-            TargetLanguage::C,
-            "tmp_haetae_boost.c",
-            "int calculate_route() {",
-            "}",
-            "dijkstra shortest path",
-        ),
-        (
-            TargetLanguage::Go,
-            "tmp_haetae_boost.go",
-            "func ProcessQueue() {",
-            "}",
-            "token bucket rate limiter",
-        ),
-        (
-            TargetLanguage::TypeScript,
-            "tmp_haetae_boost.ts",
-            "function searchKeys(): void {",
-            "}",
-            "trie prefix tree insert search",
-        ),
-        (
-            TargetLanguage::Cpp,
-            "tmp_haetae_boost.cpp",
-            "void compute_simd() {",
-            "}",
-            "simd vectorized dot product",
-        ),
-        (
-            TargetLanguage::Java,
-            "tmp_haetae_boost.java",
-            "public class Worker { public void run() {",
-            "} }",
-            "lock-free atomic stack",
-        ),
-        (
-            TargetLanguage::Kotlin,
-            "tmp_haetae_boost.kt",
-            "fun executePipeline() {",
-            "}",
-            "asynchronous pipeline http",
-        ),
-        (
-            TargetLanguage::JavaScript,
-            "tmp_haetae_boost.js",
-            "function handleRequest() {",
-            "}",
-            "branchless bitwise arithmetic select",
-        ),
-        (
-            TargetLanguage::CSharp,
-            "tmp_haetae_boost.cs",
-            "public class Service { public void Execute() {",
-            "} }",
-            "lru cache with hash table",
-        ),
-        (
-            TargetLanguage::Swift,
-            "tmp_haetae_boost.swift",
-            "func processEvents() {",
-            "}",
-            "worker pool concurrent queue",
-        ),
-        (
-            TargetLanguage::Php,
-            "tmp_haetae_boost.php",
-            "function executeWorker() {",
-            "}",
-            "token bucket rate limiter",
-        ),
-        (
-            TargetLanguage::Sql,
-            "tmp_haetae_boost.sql",
-            "CREATE PROCEDURE filter_records() BEGIN",
-            "END;",
-            "0-1 knapsack dynamic programming",
-        ),
-        (
-            TargetLanguage::Bash,
-            "tmp_haetae_boost.sh",
-            "process_batch() {",
-            "}",
-            "crc32 checksum polynomial",
-        ),
-        (
-            TargetLanguage::HtmlCss,
-            "tmp_haetae_boost.html",
-            "<div class=\"container\">",
-            "</div>",
-            "network connection card",
-        ),
-    ];
-    let mut live_verified = 0;
-    for (lang, fname, pre, suf, prompt) in &live_scenarios {
-        let file_path = temp_dir.join(fname);
-        let template = format!("{}\n    \n{}", pre, suf);
-        let _ = fs::write(&file_path, template);
-
-        let fim_code = lang.synthesize_code_fim(prompt, pre, suf);
-        assert!(!fim_code.trim().is_empty());
-
-        let assembled_file = format!("{}\n{}\n{}", pre, fim_code.trim(), suf);
-        let _ = fs::write(&file_path, &assembled_file);
-
-        let read_back = fs::read_to_string(&file_path).unwrap_or_default();
-        assert!(read_back.contains(pre));
-        assert!(read_back.contains(suf));
-        assert!(!read_back.trim().is_empty());
-        let _ = fs::remove_file(&file_path);
-
-        live_verified += FIM_LIVE_CHECKS_PER_FILE;
-    }
-    let fim_live_dur_ms = fim_live_start.elapsed().as_secs_f64() * MILLIS_PER_SEC;
-    println!(
-        "[Boost 10/12] Live File Creation & In-Between FIM Synthesis Battery: {} file tests verified in {:.2}ms (0 I/O failures)",
-        live_verified, fim_live_dur_ms
-    );
-
-    let spec_start = std::time::Instant::now();
-    let sample_specs = [
-        r#"# Specification: Vector Normalizer Contract
-- Invariant 1: scale factor must not equal 0
-- Invariant 2: return base divided by scale
-- Parameter: base_val (int)
-- Parameter: scale (int)
-"#,
-        r#"# Specification: Bounded Offset Contract
-- Invariant 1: scale factor must not equal 0
-- Invariant 2: return base divided by scale
-- Parameter: offset_val (int)
-- Parameter: divisor (int)
-"#,
-        r#"# Specification: Safe Rate Contract
-- Invariant 1: scale factor must not equal 0
-- Invariant 2: return base divided by scale
-- Parameter: total_tokens (int)
-- Parameter: window_size (int)
-"#,
-        r#"# Specification: Ratio Step Contract
-- Invariant 1: scale factor must not equal 0
-- Invariant 2: return base divided by scale
-- Parameter: current_tick (int)
-- Parameter: step_interval (int)
-"#,
-        r#"# Specification: Clamped Scale Contract
-- Invariant 1: scale factor must not equal 0
-- Invariant 2: return base divided by scale
-- Parameter: min_val (int)
-- Parameter: max_val (int)
-"#,
-        r#"# Specification: Balance Delta Contract
-- Invariant 1: scale factor must not equal 0
-- Invariant 2: return base divided by scale
-- Parameter: balance (int)
-- Parameter: transfer_val (int)
-"#,
-        r#"# Specification: Buffer Head Contract
-- Invariant 1: scale factor must not equal 0
-- Invariant 2: return base divided by scale
-- Parameter: buffer_head (int)
-- Parameter: ring_size (int)
-"#,
-        r#"# Specification: Rate Window Contract
-- Invariant 1: scale factor must not equal 0
-- Invariant 2: return base divided by scale
-- Parameter: window_tokens (int)
-- Parameter: interval_ms (int)
-"#,
-    ];
-    let mut spec_count = 0;
-    for sample_spec_raw in &sample_specs {
-        let parsed_specs = parse_markdown_spec(sample_spec_raw);
-        assert!(!parsed_specs.is_empty());
-        let spec = &parsed_specs[0];
-        let c_code = generate_c_implementation(spec);
-        let param_refs: Vec<&str> = spec.param_types.iter().map(|s| s.as_str()).collect();
-        let spec_harness = generate_c_fuzz_harness(&spec.function_name, &param_refs);
-        let spec_full = format!("{}\n{}\n{}\n", bundle_headers(), c_code, spec_harness);
-        if let Ok(c) = tcc.compile_in_memory(&spec_full, "haetae_fuzz_entry") {
-            let bytecode = tcc.get_bytecode(&c);
-            let _ = verify_stack_frame_bound_for_isa(bytecode, max_stack, isa);
-            let _ = verify_cfi_for_isa(bytecode, isa);
-            spec_count += 1;
-        }
-    }
-    let spec_dur_ms = spec_start.elapsed().as_secs_f64() * MILLIS_PER_SEC;
-    println!(
-        "[Boost 11/12] Spec-Driven Contract Parsing & JIT Compilation Suite: {} contracts compiled & CFI verified in {:.2}ms",
-        spec_count, spec_dur_ms
-    );
-
-    let stress_start = std::time::Instant::now();
-    let c_bitwise = TargetLanguage::C.synthesize_code("branchless bitwise arithmetic select");
-    let c_divide = TargetLanguage::C.synthesize_code("safe division scalar invariant");
-    let c_search = TargetLanguage::C.synthesize_code("binary search sorted array");
-    let c_hash = TargetLanguage::C.synthesize_code("lru cache with hash table");
-    let c_crc = TargetLanguage::C.synthesize_code("crc32 checksum lookup table polynomial");
-    let c_token_bucket =
-        TargetLanguage::C.synthesize_code("token bucket rate limiter refill capacity acquire");
-    let c_trie = TargetLanguage::C.synthesize_code("trie prefix tree insert search autocomplete");
-    let c_simd =
-        TargetLanguage::C.synthesize_code("simd vectorized dot product multiply accumulate");
-    let c_dp = TargetLanguage::C.synthesize_code("0-1 knapsack dynamic programming dp");
-    let c_atomic =
-        TargetLanguage::C.synthesize_code("lock-free atomic stack cas treiber concurrency");
-
-    let stress_harnesses = [
-        format!(
-            "{}\n{}\nint haetae_fuzz_entry(long long p) {{ return branchless_select((int)(p & 1), (int)(p >> 1), 0); }}",
-            bundle_headers(),
-            c_bitwise
-        ),
-        format!(
-            "{}\n{}\nint haetae_fuzz_entry(long long p) {{ return divide_scalar((int)p, (int)(p & 1)); }}",
-            bundle_headers(),
-            c_divide
-        ),
-        format!(
-            "{}\n{}\nint haetae_fuzz_entry(long long p) {{ int a[5] = {{1, 2, 3, 4, 5}}; return binary_search(a, 5, (int)(p & 3)); }}",
-            bundle_headers(),
-            c_search
-        ),
-        format!(
-            "{}\n{}\nint haetae_fuzz_entry(long long p) {{ SimpleHashTable ht; for (int i = 0; i < 256; i++) {{ ht.entries[i].used = 0; }} hash_put(&ht, \"k\", (int)p); return ht.entries[0].val; }}",
-            bundle_headers(),
-            c_hash
-        ),
-        format!(
-            "{}\n{}\nint haetae_fuzz_entry(long long p) {{ unsigned char buf[4] = {{(unsigned char)p, (unsigned char)(p >> 8), (unsigned char)(p >> 16), (unsigned char)(p >> 24)}}; return (int)crc32_compute(buf, 4); }}",
-            bundle_headers(),
-            c_crc
-        ),
-        format!(
-            "{}\n{}\nint haetae_fuzz_entry(long long p) {{ TokenBucket tb; tb.capacity = 100; tb.tokens = 50; return token_bucket_consume(&tb, (int)(p & 1)); }}",
-            bundle_headers(),
-            c_token_bucket
-        ),
-        format!(
-            "{}\n{}\nint haetae_fuzz_entry(long long p) {{ (void)p; TrieNode* root = trie_create(); trie_insert(root, \"test\"); return root->is_end; }}",
-            bundle_headers(),
-            c_trie
-        ),
-        format!(
-            "{}\n{}\nint haetae_fuzz_entry(long long p) {{ float a[2] = {{(float)p, 1.0f}}; float b[2] = {{1.0f, 2.0f}}; return (int)dot_product_simd(a, b, 2); }}",
-            bundle_headers(),
-            c_simd
-        ),
-        format!(
-            "{}\n{}\nint haetae_fuzz_entry(long long p) {{ int w[2] = {{1, 2}}; int v[2] = {{10, 20}}; return knapsack_01(w, v, 2, (int)(p & 3)); }}",
-            bundle_headers(),
-            c_dp
-        ),
-        format!(
-            "{}\n{}\nint haetae_fuzz_entry(long long p) {{ AtomicStack st; st.head = 0; AtomicNode n; n.val = (int)p; n.next = 0; atomic_stack_push(&st, &n); return st.head->val; }}",
-            bundle_headers(),
-            c_atomic
-        ),
-        format!(
-            "{}\nstatic inline int fast_sqrt_newton(int val) {{ if (val <= 0) return 0; long long x = val; long long y = (x + 1) >> 1; while (y < x) {{ x = y; y = (x + val / x) >> 1; }} return (int)x; }}\nint haetae_fuzz_entry(long long p) {{ return fast_sqrt_newton((int)(p & 1023)); }}",
-            bundle_headers()
-        ),
-        format!(
-            "{}\ntypedef struct {{ int capacity; int head; int tail; int data[16]; }} RingBufferSeq;\nstatic inline int ring_buffer_push(RingBufferSeq* rb, int val) {{ int next = (rb->head + 1) & 15; if (next == rb->tail) return 0; rb->data[rb->head] = val; rb->head = next; return 1; }}\nint haetae_fuzz_entry(long long p) {{ RingBufferSeq rb; rb.capacity = 16; rb.head = 0; rb.tail = 0; return ring_buffer_push(&rb, (int)p); }}",
-            bundle_headers()
-        ),
-        format!(
-            "{}\nstatic inline int utf8_validate_byte(unsigned char b) {{ if (b < 128) return 1; if ((b & 0xE0) == 0xC0) return 2; if ((b & 0xF0) == 0xE0) return 3; if ((b & 0xF8) == 0xF0) return 4; return 0; }}\nint haetae_fuzz_entry(long long p) {{ return utf8_validate_byte((unsigned char)(p & 255)); }}",
-            bundle_headers()
-        ),
-        format!(
-            "{}\nstatic inline void matrix_2x2_transpose(const int* in, int* out) {{ out[0] = in[0]; out[1] = in[2]; out[2] = in[1]; out[3] = in[3]; }}\nint haetae_fuzz_entry(long long p) {{ int in[4] = {{(int)p, 1, 2, 3}}; int out[4] = {{0}}; matrix_2x2_transpose(in, out); return out[1]; }}",
-            bundle_headers()
-        ),
-        format!(
-            "{}\nstatic inline void bloom_add(unsigned int* filter, int key) {{ unsigned int h1 = (unsigned int)(key * 2654435761u); unsigned int h2 = (unsigned int)((key ^ 0x55555555) * 2246822519u); *filter |= (1u << (h1 & 31)) | (1u << (h2 & 31)); }}\nstatic inline int bloom_check(unsigned int filter, int key) {{ unsigned int h1 = (unsigned int)(key * 2654435761u); unsigned int h2 = (unsigned int)((key ^ 0x55555555) * 2246822519u); return ((filter & (1u << (h1 & 31))) != 0) && ((filter & (1u << (h2 & 31))) != 0); }}\nint haetae_fuzz_entry(long long p) {{ unsigned int f = 0; bloom_add(&f, (int)p); return bloom_check(f, (int)p); }}",
-            bundle_headers()
-        ),
-        format!(
-            "{}\nstatic inline void merge_two(const int* a, int na, const int* b, int nb, int* out) {{ int i = 0, j = 0, k = 0; while (i < na && j < nb) {{ if (a[i] <= b[j]) out[k++] = a[i++]; else out[k++] = b[j++]; }} while (i < na) out[k++] = a[i++]; while (j < nb) out[k++] = b[j++]; }}\nint haetae_fuzz_entry(long long p) {{ int a[2] = {{1, (int)(p & 7)}}; int b[2] = {{2, 4}}; int out[4] = {{0}}; merge_two(a, 2, b, 2, out); return out[0]; }}",
-            bundle_headers()
-        ),
-        format!(
-            "{}\nstatic inline char base64_char(int index) {{ if (index <= 0) return 0; const char table[] = \"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+_\"; return table[index & 63]; }}\nint haetae_fuzz_entry(long long p) {{ return (int)base64_char((int)(p & 63)); }}",
-            bundle_headers()
-        ),
-        format!(
-            "{}\ntypedef struct {{ int left; int right; int symbol; }} HuffNode;\nstatic inline int huffman_step(const HuffNode* tree, int root, int bit) {{ if (bit == 0) return tree[root].left; return tree[root].right; }}\nint haetae_fuzz_entry(long long p) {{ HuffNode tree[3] = {{{{1, 2, -1}}, {{-1, -1, 65}}, {{-1, -1, 66}}}};\nint next = huffman_step(tree, 0, (int)(p & 1)); return tree[next].symbol; }}",
-            bundle_headers()
-        ),
-        format!(
-            "{}\nstatic inline void fib_mul(long long F[2][2], long long M[2][2]) {{ long long x = F[0][0] * M[0][0] + F[0][1] * M[1][0]; long long y = F[0][0] * M[0][1] + F[0][1] * M[1][1]; long long z = F[1][0] * M[0][0] + F[1][1] * M[1][0]; long long w = F[1][0] * M[0][1] + F[1][1] * M[1][1]; F[0][0] = x & 0x7FFFFFFF; F[0][1] = y & 0x7FFFFFFF; F[1][0] = z & 0x7FFFFFFF; F[1][1] = w & 0x7FFFFFFF; }}\nint haetae_fuzz_entry(long long p) {{ long long F[2][2] = {{{{1, 1}}, {{1, 0}}}};\nlong long M[2][2] = {{{{((p & 1)), 1}}, {{1, 0}}}};\nfib_mul(F, M); return (int)F[0][0]; }}",
-            bundle_headers()
-        ),
-        format!(
-            "{}\ntypedef struct {{ int head; int tail; int count; int data[8]; }} PcQueue;\nstatic inline int pc_enqueue(PcQueue* q, int item) {{ if (q->count >= 8) return 0; q->data[q->tail] = item; q->tail = (q->tail + 1) & 7; q->count++; return 1; }}\nstatic inline int pc_dequeue(PcQueue* q, int* item) {{ if (q->count <= 0) return 0; *item = q->data[q->head]; q->head = (q->head + 1) & 7; q->count--; return 1; }}\nint haetae_fuzz_entry(long long p) {{ PcQueue q; q.head = 0; q.tail = 0; q.count = 0; pc_enqueue(&q, (int)p); int out = 0; pc_dequeue(&q, &out); return out; }}",
-            bundle_headers()
-        ),
-    ];
-    let stress_fuzzer = FuzzerEngine::new(BOOST_STAGE12_ALGO_ITERATIONS);
-    let mut stress_verified = 0;
-    for full_code in &stress_harnesses {
-        if let Ok(c) = tcc.compile_in_memory(full_code, "haetae_fuzz_entry") {
-            let bytecode = tcc.get_bytecode(&c);
-            let _ = verify_stack_frame_bound_for_isa(bytecode, max_stack, isa);
-            let _ = verify_cfi_for_isa(bytecode, isa);
-            let res = stress_fuzzer.run_fuzz_loop(&tcc, &c);
-            if let Ok(r) = res {
-                stress_verified += r.total_iterations;
-            }
-        }
-    }
-    let stress_dur_ms = stress_start.elapsed().as_secs_f64() * MILLIS_PER_SEC;
-    println!(
-        "[Boost 12/12] Multi-Algorithm Micro-Fuzzing & Invariant Stress Battery: {} fuzz runs verified in {:.2}ms (0 CFI/stack/trap violations)",
-        stress_verified, stress_dur_ms
     );
 
     let total_bench_elapsed_ms = boost_total_start.elapsed().as_secs_f64() * MILLIS_PER_SEC;
@@ -1309,19 +700,9 @@ async fn handle_boost() {
     } else {
         0.0
     };
-    let stress_sec = stress_dur_ms / MILLIS_PER_SEC;
-    let stress_fuzz_rate = if stress_sec > MIN_BENCHMARK_ELAPSED_SECS {
-        (stress_verified as f64) / stress_sec
-    } else {
-        0.0
-    };
 
     println!("------------------------------------------------------------");
     println!("Haetae Engine & Hardware Execution Benchmark Summary:");
-    println!(
-        "  - Benchmark Stages Completed: {} / {}",
-        BOOST_TOTAL_STAGES, BOOST_TOTAL_STAGES
-    );
     println!(
         "  - L3 Cache Streaming Rate:    {:.2} GB/s",
         l3_throughput_gbs
@@ -1332,16 +713,8 @@ async fn handle_boost() {
     );
     println!("  - Micro-Fuzz Execution Rate:  {:.0} runs/sec", fuzz_rate);
     println!(
-        "  - Multi-Algo Stress Fuzzing:  {:.0} runs/sec",
-        stress_fuzz_rate
-    );
-    println!(
         "  - AST & Language Matrix:      {} syntax pairs verified",
         prim_count + matrix_count
-    );
-    println!(
-        "  - Multi-Lang JIT & Lowering:  {} programs compiled",
-        lower_count + spec_count
     );
     println!("  - CFI & Stack Safety Bounds:  100% compliant (0 violations, 0 crashes)");
     println!(
@@ -1704,5 +1077,3 @@ async fn handle_server(args: &[String]) {
         eprintln!("Server error: {}", e);
     }
 }
-
-

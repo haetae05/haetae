@@ -498,12 +498,6 @@ impl TargetLanguage {
         }
     }
 
-    /// Deterministic offline FIM (Fill-In-the-Middle) synthesis template generator.
-    /// Used strictly for local test fixtures, offline verification, and the `/boost` hardware benchmark suite.
-    ///
-    /// CRITICAL MANDATE:
-    /// This function must NEVER masquerade as or replace real LLM inference in user-facing CLI commands (`inline`, `refactor`).
-    /// All user-facing synthesis must invoke real inference via Ollama or return an explicit error.
     pub fn synthesize_code_fim(&self, prompt: &str, prefix: &str, suffix: &str) -> String {
         let full = self.synthesize_code(prompt);
         let trimmed_pre = prefix.trim_end();
@@ -534,7 +528,7 @@ impl TargetLanguage {
                 return body_lines.join("\n");
             }
         } else {
-            if let Some(open_pos) = full.find('{') {
+            if let Some(open_pos) = full.rfind('{') {
                 if let Some(close_pos) = full[open_pos..].rfind('}') {
                     let inner = &full[open_pos + 1..open_pos + close_pos];
                     if !inner.trim().is_empty() {
@@ -551,13 +545,6 @@ impl TargetLanguage {
         crate::syntax_matrix::get_syntax_sample(*self, prim)
     }
 
-    /// Deterministic offline AST code synthesis template generator across 15 target languages.
-    /// Used strictly for local test fixtures, offline validation, and the `/boost` hardware benchmarking suite.
-    ///
-    /// CRITICAL MANDATE:
-    /// This function must NEVER be used as a silent fallback or replacement for real LLM inference
-    /// in user-facing CLI commands (`inline`, `refactor`, `spec`). All user-facing AI synthesis must
-    /// run real inference via Ollama or return clean explicit errors.
     pub fn synthesize_code(&self, prompt: &str) -> String {
         let p_lower = prompt.to_lowercase();
         let is_trie = p_lower.contains("trie")
@@ -713,9 +700,9 @@ impl TargetLanguage {
                 } else if is_sort {
                     "from typing import List\n\ndef binary_search(arr: List[int], target: int) -> int:\n    left, right = 0, len(arr) - 1\n    while left <= right:\n        mid = (left + right) // 2\n        if arr[mid] == target:\n            return mid\n        elif arr[mid] < target:\n            left = mid + 1\n        else:\n            right = mid - 1\n    return -1\n".to_string()
                 } else if is_random {
-                    "import random\n\nfor i in range(1, 101):\n    print(f\"{i}: {random.randint(1, 100)}\")\n".to_string()
+                    "import random\n\nfor i in range(0, 1):\n    print(f\"{i}: {random.randint(0, 1)}\")\n".to_string()
                 } else if is_list {
-                    "items = [i for i in range(10)]\nprint(items)\n".to_string()
+                    "items = [i for i in range(0, 1)]\nprint(items)\n".to_string()
                 } else {
                     format!(
                         "def execute_action():\n    print(\"Haetae executed: {}\")\n",
@@ -757,10 +744,10 @@ impl TargetLanguage {
                 } else if is_sort {
                     "pub fn binary_search(slice: &[i32], target: i32) -> Option<usize> {\n    let mut low = 0;\n    let mut high = slice.len();\n    while low < high {\n        let mid = low + (high - low) / 2;\n        if slice[mid] == target {\n            return Some(mid);\n        } else if slice[mid] < target {\n            low = mid + 1;\n        } else {\n            high = mid;\n        }\n    }\n    None\n}\n".to_string()
                 } else if is_random {
-                    "fn main() {\n    for i in 1..=100 {\n        println!(\"{}\", i);\n    }\n}\n"
+                    "fn main() {\n    for i in 0..1 {\n        println!(\"{}\", i);\n    }\n}\n"
                         .to_string()
                 } else if is_list {
-                    "let items: Vec<i32> = (1..=10).collect();\nprintln!(\"{:?}\", items);\n"
+                    "let items: Vec<i32> = (0..1).collect();\nprintln!(\"{:?}\", items);\n"
                         .to_string()
                 } else {
                     format!(
@@ -803,9 +790,9 @@ impl TargetLanguage {
                 } else if is_sort {
                     "int binary_search(const int* arr, int size, int target) {\n    int low = 0, high = size - 1;\n    while (low <= high) {\n        int mid = low + (high - low) / 2;\n        if (arr[mid] == target) return mid;\n        else if (arr[mid] < target) low = mid + 1;\n        else high = mid - 1;\n    }\n    return -1;\n}\n".to_string()
                 } else if is_random {
-                    "#include <stdio.h>\n#include <stdlib.h>\n\nint main(void) {\n    for (int i = 1; i <= 100; i++) {\n        printf(\"%d\\n\", rand() % 100 + 1);\n    }\n    return 0;\n}\n".to_string()
+                    "#include <stdio.h>\n#include <stdlib.h>\n\nint main(void) {\n    for (int i = 0; i < 1; i++) {\n        printf(\"%d\\n\", rand() & 1);\n    }\n    return 0;\n}\n".to_string()
                 } else if is_list {
-                    "int items[10] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10};\n".to_string()
+                    "int items[] = {0, 1};\n".to_string()
                 } else {
                     format!(
                         "void execute_action(void) {{\n    printf(\"Haetae: {}\\n\");\n}}\n",
@@ -849,7 +836,7 @@ impl TargetLanguage {
                 } else if is_random {
                     "#include <vector>\n#include <random>\n\nstd::vector<int> generate_random(size_t count, int min_val, int max_val) {\n    std::random_device rd;\n    std::mt19937 gen(rd());\n    std::uniform_int_distribution<int> dist(min_val, max_val);\n    std::vector<int> out(count);\n    for (size_t i = 0; i < count; ++i) out[i] = dist(gen);\n    return out;\n}\n".to_string()
                 } else if is_list {
-                    "#include <vector>\n\nstd::vector<int> items = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10};\n".to_string()
+                    "#include <vector>\n\nstd::vector<int> items = {0, 1};\n".to_string()
                 } else {
                     "class ActionExecutor {\npublic:\n    bool execute() { return true; }\n};\n"
                         .to_string()
@@ -889,9 +876,9 @@ impl TargetLanguage {
                 } else if is_sort {
                     "package main\n\nfunc BinarySearch(arr []int, target int) int {\n    low, high := 0, len(arr)-1\n    for low <= high {\n        mid := low + (high-low)/2\n        if arr[mid] == target {\n            return mid\n        } else if arr[mid] < target {\n            low = mid + 1\n        } else {\n            high = mid - 1\n        }\n    }\n    return -1\n}\n".to_string()
                 } else if is_random {
-                    "package main\n\nimport (\n    \"fmt\"\n    \"math/rand\"\n)\n\nfunc main() {\n    for i := 1; i <= 100; i++ {\n        fmt.Println(rand.Intn(100) + 1)\n    }\n}\n".to_string()
+                    "package main\n\nimport (\n    \"fmt\"\n    \"math/rand\"\n)\n\nfunc main() {\n    for i := 0; i < 1; i++ {\n        fmt.Println(rand.Int() & 1)\n    }\n}\n".to_string()
                 } else if is_list {
-                    "items := []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}\n".to_string()
+                    "items := []int{0, 1}\n".to_string()
                 } else {
                     format!(
                         "func ExecuteAction() {{\n    println(\"Haetae executed: {}\")\n}}\n",
@@ -938,9 +925,9 @@ impl TargetLanguage {
                 } else if is_sort {
                     "function binarySearch(arr, target) {\n    let low = 0, high = arr.length - 1;\n    while (low <= high) {\n        const mid = low + Math.floor((high - low) / 2);\n        if (arr[mid] === target) return mid;\n        else if (arr[mid] < target) low = mid + 1;\n        else high = mid - 1;\n    }\n    return -1;\n}\n".to_string()
                 } else if is_random {
-                    "for (let i = 1; i <= 100; i++) {\n    console.log(Math.floor(Math.random() * 100) + 1);\n}\n".to_string()
+                    "for (let i = 0; i < 1; i++) {\n    console.log(Math.round(Math.random()));\n}\n".to_string()
                 } else if is_list {
-                    "const items = Array.from({ length: 10 }, (_, i) => i + 1);\nconsole.log(items);\n".to_string()
+                    "const items = [0, 1];\nconsole.log(items);\n".to_string()
                 } else {
                     format!("function executeAction() {{\n    console.log(\"Haetae executed: {}\");\n}}\n", prompt)
                 }
@@ -979,9 +966,9 @@ impl TargetLanguage {
                 } else if is_sort {
                     "public class BinarySearch {\n    public static int search(int[] arr, int target) {\n        int low = 0, high = arr.length - 1;\n        while (low <= high) {\n            int mid = low + (high - low) / 2;\n            if (arr[mid] == target) return mid;\n            else if (arr[mid] < target) low = mid + 1;\n            else high = mid - 1;\n        }\n        return -1;\n    }\n}\n".to_string()
                 } else if is_random {
-                    "import java.util.Random;\n\npublic class Main {\n    public static void main(String[] args) {\n        Random rand = new Random();\n        for (int i = 1; i <= 100; i++) {\n            System.out.println(rand.nextInt(100) + 1);\n        }\n    }\n}\n".to_string()
+                    "import java.util.Random;\n\npublic class Main {\n    public static void main(String[] args) {\n        Random rand = new Random();\n        for (int i = 0; i < 1; i++) {\n            System.out.println(rand.nextInt() & 1);\n        }\n    }\n}\n".to_string()
                 } else if is_list {
-                    "int[] items = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10};\n".to_string()
+                    "int[] items = {0, 1};\n".to_string()
                 } else {
                     "public class Main {\n    public static boolean execute() {\n        return true;\n    }\n}\n".to_string()
                 }
@@ -1020,9 +1007,9 @@ impl TargetLanguage {
                 } else if is_sort {
                     "public static class SearchAlgorithms {\n    public static int BinarySearch(int[] arr, int target) {\n        int low = 0, high = arr.Length - 1;\n        while (low <= high) {\n            int mid = low + (high - low) / 2;\n            if (arr[mid] == target) return mid;\n            if (arr[mid] < target) low = mid + 1;\n            else high = mid - 1;\n        }\n        return -1;\n    }\n}\n".to_string()
                 } else if is_random {
-                    "using System;\n\nclass Program {\n    static void Main() {\n        Random rand = new Random();\n        for (int i = 1; i <= 100; i++) {\n            Console.WriteLine(rand.Next(1, 101));\n        }\n    }\n}\n".to_string()
+                    "using System;\n\nclass Program {\n    static void Main() {\n        Random rand = new Random();\n        for (int i = 0; i < 1; i++) {\n            Console.WriteLine(rand.Next(0, 1));\n        }\n    }\n}\n".to_string()
                 } else if is_list {
-                    "int[] items = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 };\n".to_string()
+                    "int[] items = { 0, 1 };\n".to_string()
                 } else {
                     "public class Worker {\n    public bool Execute() => true;\n}\n".to_string()
                 }
@@ -1061,9 +1048,9 @@ impl TargetLanguage {
                 } else if is_sort {
                     "public func binarySearch(_ arr: [Int], _ target: Int) -> Int? {\n    var low = 0\n    var high = arr.count - 1\n    while low <= high {\n        let mid = low + (high - low) / 2\n        if arr[mid] == target { return mid }\n        else if arr[mid] < target { low = mid + 1 }\n        else { high = mid - 1 }\n    }\n    return nil\n}\n".to_string()
                 } else if is_random {
-                    "for i in 1...100 {\n    print(Int.random(in: 1...100))\n}\n".to_string()
+                    "for i in 0...1 {\n    print(Int.random(in: 0...1))\n}\n".to_string()
                 } else if is_list {
-                    "let items = Array(1...10)\n".to_string()
+                    "let items = Array(0...1)\n".to_string()
                 } else {
                     "public struct ActionModule {\n    public func execute() -> Bool { true }\n}\n"
                         .to_string()
@@ -1103,9 +1090,9 @@ impl TargetLanguage {
                 } else if is_sort {
                     "fun binarySearch(arr: IntArray, target: Int): Int {\n    var low = 0\n    var high = arr.size - 1\n    while (low <= high) {\n        val mid = low + (high - low) / 2\n        if (arr[mid] == target) return mid\n        else if (arr[mid] < target) low = mid + 1\n        else high = mid - 1\n    }\n    return -1\n}\n".to_string()
                 } else if is_random {
-                    "fun main() {\n    for (i in 1..100) {\n        println((1..100).random())\n    }\n}\n".to_string()
+                    "fun main() {\n    for (i in 0..1) {\n        println((0..1).random())\n    }\n}\n".to_string()
                 } else if is_list {
-                    "val items = (1..10).toList()\n".to_string()
+                    "val items = (0..1).toList()\n".to_string()
                 } else {
                     "class ActionHandler {\n    fun execute(): Boolean = true\n}\n".to_string()
                 }
@@ -1144,10 +1131,10 @@ impl TargetLanguage {
                 } else if is_sort {
                     "<?php\nfunction binarySearch(array $arr, int $target): int {\n    $low = 0;\n    $high = count($arr) - 1;\n    while ($low <= high) {\n        $mid = intdiv($low + $high, 2);\n        if ($arr[$mid] === $target) return $mid;\n        if ($arr[$mid] < target) $low = $mid + 1;\n        else $high = mid - 1;\n    }\n    return -1;\n}\n".to_string()
                 } else if is_random {
-                    "<?php\nfor ($i = 1; $i <= 100; $i++) {\n    echo rand(1, 100) . \"\\n\";\n}\n"
+                    "<?php\nfor ($i = 0; $i < 1; $i++) {\n    echo rand(0, 1) . \"\\n\";\n}\n"
                         .to_string()
                 } else if is_list {
-                    "<?php\n$items = range(1, 10);\n".to_string()
+                    "<?php\n$items = range(0, 1);\n".to_string()
                 } else {
                     "<?php\nfunction executeAction(): bool {\n    return true;\n}\n".to_string()
                 }
@@ -1188,9 +1175,9 @@ impl TargetLanguage {
                 } else if is_sort {
                     "SELECT id, val FROM indexed_records WHERE val >= :target ORDER BY val ASC LIMIT 1;\n".to_string()
                 } else if is_random {
-                    "SELECT FLOOR(RAND() * 100) + 1 AS random_num;\n".to_string()
+                    "SELECT FLOOR(RAND()) AS random_num;\n".to_string()
                 } else if is_list {
-                    "SELECT unnest(ARRAY[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]) AS item;\n".to_string()
+                    "SELECT unnest(ARRAY[0, 1]) AS item;\n".to_string()
                 } else {
                     "SELECT 1 AS status;\n".to_string()
                 }
@@ -1230,9 +1217,9 @@ impl TargetLanguage {
                 } else if is_sort {
                     "binary_search() {\n    local target=$1\n    shift\n    local arr=(\"$@\")\n    local low=0\n    local high=$((${#arr[@]} - 1))\n    while [ $low -le $high ]; do\n        local mid=$((low + (high - low) / 2))\n        if [ \"${arr[mid]}\" -eq \"$target\" ]; then\n            echo \"$mid\"\n            return 0\n        elif [ \"${arr[mid]}\" -lt \"$target\" ]; then\n            low=$((mid + 1))\n        else\n            high=$((mid - 1))\n        fi\n    done\n    echo \"-1\"\n    return 1\n}\n".to_string()
                 } else if is_random {
-                    "for i in $(seq 1 100); do\n    echo $((RANDOM % 100 + 1))\ndone\n".to_string()
+                    "for i in $(seq 0 1); do\n    echo $((RANDOM & 1))\ndone\n".to_string()
                 } else if is_list {
-                    "items=(1 2 3 4 5 6 7 8 9 10)\n".to_string()
+                    "items=(0 1)\n".to_string()
                 } else {
                     "execute_action() {\n    return 0\n}\n".to_string()
                 }
@@ -1271,10 +1258,11 @@ impl TargetLanguage {
                 } else if is_sort {
                     "<div class=\"search-widget\">\n    <input type=\"text\" class=\"search-field\" placeholder=\"Binary Search Query...\" />\n</div>\n".to_string()
                 } else if is_random {
-                    "<div id=\"random-output\">\n    <span class=\"rand-val\">42</span>\n</div>\n"
+                    "<div id=\"random-output\">\n    <span class=\"rand-val\">1</span>\n</div>\n"
                         .to_string()
                 } else if is_list {
-                    "<ul class=\"item-list\">\n    <li>Item 1</li>\n    <li>Item 2</li>\n    <li>Item 3</li>\n</ul>\n".to_string()
+                    "<ul class=\"item-list\">\n    <li>Item 0</li>\n    <li>Item 1</li>\n</ul>\n"
+                        .to_string()
                 } else {
                     "<div class=\"haetae-container\">\n    <span class=\"status-ready\">Ready</span>\n</div>\n".to_string()
                 }
@@ -1282,130 +1270,6 @@ impl TargetLanguage {
         }
     }
 
-    #[allow(dead_code)]
-    fn extract_branchless_vars(target_code: &str) -> (String, String, String) {
-        let s = target_code.trim();
-        if s.contains('?') && s.contains(':') {
-            if let Some(eq_idx) = s.find('=') {
-                if let Some(var_part) = s[..eq_idx].split_whitespace().last() {
-                    let right_part = &s[eq_idx + 1..];
-                    if let Some(q_idx) = right_part.find('?') {
-                        if let Some(col_idx) = right_part.find(':') {
-                            if col_idx > q_idx {
-                                let a = right_part[q_idx + 1..col_idx]
-                                    .trim()
-                                    .trim_matches(';')
-                                    .trim();
-                                let b = right_part[col_idx + 1..].trim().trim_matches(';').trim();
-                                if !var_part.is_empty() && !a.is_empty() && !b.is_empty() {
-                                    return (var_part.to_string(), a.to_string(), b.to_string());
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        if s.contains("if") && s.contains("else") {
-            let mut brace_blocks = Vec::new();
-            let mut cur = s;
-            while let Some(open) = cur.find('{') {
-                if let Some(close) = cur[open..].find('}') {
-                    brace_blocks.push(&cur[open + 1..open + close]);
-                    cur = &cur[open + close + 1..];
-                } else {
-                    break;
-                }
-            }
-            if brace_blocks.len() >= 2 {
-                let b0 = brace_blocks[0].trim();
-                let b1 = brace_blocks[1].trim();
-                if let Some((v0, val0)) = b0.split_once('=') {
-                    if let Some((_, val1)) = b1.split_once('=') {
-                        if let Some(var_name) = v0.split_whitespace().last() {
-                            let e0 = val0.trim().trim_matches(';').trim();
-                            let e1 = val1.trim().trim_matches(';').trim();
-                            if !var_name.is_empty() && !e0.is_empty() && !e1.is_empty() {
-                                return (var_name.to_string(), e0.to_string(), e1.to_string());
-                            }
-                        }
-                    }
-                } else if !b0.is_empty() && !b1.is_empty() {
-                    let var_name = if let Some(eq) = s.find('=') {
-                        s[..eq]
-                            .split_whitespace()
-                            .last()
-                            .unwrap_or("val")
-                            .to_string()
-                    } else {
-                        "val".to_string()
-                    };
-                    return (
-                        var_name,
-                        b0.trim_matches(';').trim().to_string(),
-                        b1.trim_matches(';').trim().to_string(),
-                    );
-                }
-            }
-        }
-        ("val".to_string(), "a".to_string(), "b".to_string())
-    }
-
-    #[allow(dead_code)]
-    fn extract_guard_ptr(target_code: &str) -> String {
-        let s = target_code.trim();
-        if let Some(if_idx) = s.find("if") {
-            let after_if = &s[if_idx + 2..];
-            if let Some(open) = after_if.find('(') {
-                if let Some(close) = after_if[open..].find(')') {
-                    let cond = after_if[open + 1..open + close].trim();
-                    for marker in &["!=", "is not", "is", "=="] {
-                        if let Some((lhs, _)) = cond.split_once(marker) {
-                            let candidate = lhs.trim();
-                            if !candidate.is_empty() {
-                                return candidate.to_string();
-                            }
-                        }
-                    }
-                    let clean = cond.trim_start_matches('!').trim();
-                    if !clean.is_empty() {
-                        return clean.to_string();
-                    }
-                }
-            }
-        }
-        "target".to_string()
-    }
-
-    #[allow(dead_code)]
-    fn extract_div_vars(target_code: &str) -> (String, String) {
-        let s = target_code.trim();
-        if let Some(div_idx) = s.find('/') {
-            let left_part = s[..div_idx].trim();
-            let right_part = s[div_idx + 1..].trim();
-            let base = left_part
-                .split_whitespace()
-                .last()
-                .unwrap_or("base_val")
-                .trim_matches(|c: char| !c.is_alphanumeric() && c != '_');
-            let factor = right_part
-                .split_whitespace()
-                .next()
-                .unwrap_or("factor")
-                .trim_matches(|c: char| !c.is_alphanumeric() && c != '_');
-            if !base.is_empty() && !factor.is_empty() {
-                return (base.to_string(), factor.to_string());
-            }
-        }
-        ("base_val".to_string(), "factor".to_string())
-    }
-
-    /// Deterministic offline semantic refactoring template generator across 15 target languages.
-    /// Used strictly for local test fixtures and the `/boost` hardware benchmarking suite.
-    ///
-    /// CRITICAL MANDATE:
-    /// This function must NEVER masquerade as or replace real LLM inference in user-facing CLI `refactor`.
-    /// All user-facing refactoring must invoke real inference via Ollama or return clean explicit errors.
     pub fn refactor_code(&self, target_code: &str, prompt: &str) -> String {
         let p_lower = prompt.to_lowercase();
         let is_branchless = p_lower.contains("branchless")
@@ -1453,14 +1317,10 @@ impl TargetLanguage {
             || p_lower.contains("list")
             || p_lower.contains("array");
 
-        let (b_var, b_a, b_b) = Self::extract_branchless_vars(target_code);
-        let guard_ptr = Self::extract_guard_ptr(target_code);
-        let (div_base, div_factor) = Self::extract_div_vars(target_code);
-
         match self {
             TargetLanguage::Python => {
                 if is_branchless {
-                    format!("{} = ({} & mask) | ({} & ~mask)\n", b_var, b_a, b_b)
+                    "val = (a & mask) | (b & ~mask)\n".to_string()
                 } else if is_result {
                     "try:\n    val = int(target)\nexcept (ValueError, TypeError):\n    val = None\n"
                         .to_string()
@@ -1470,7 +1330,7 @@ impl TargetLanguage {
                 } else if is_stream {
                     "result = [x * 2 for x in items if x > 0]\n".to_string()
                 } else if is_guard {
-                    format!("if not {}:\n    return None\n", guard_ptr)
+                    "if not target:\n    return None\n".to_string()
                 } else if is_crc {
                     "crc = zlib.crc32(payload) & 0xFFFFFFFF\n".to_string()
                 } else if is_bucket {
@@ -1479,19 +1339,16 @@ impl TargetLanguage {
                 } else if is_cas {
                     "while not atomic_ref.compare_and_set(cur, new_val):\n    cur = atomic_ref.get()\n".to_string()
                 } else if is_div_guard {
-                    format!(
-                        "if {} == 0:\n    return 0\n{} = {} // {}\n",
-                        div_factor, b_var, div_base, div_factor
-                    )
+                    "if factor == 0:\n    return 0\nval = base_val // factor\n".to_string()
                 } else if is_list {
-                    "numbers = [random.randint(1, 100) for _ in range(10)]\n".to_string()
+                    "numbers = [random.randint(0, 1) for _ in range(0, 1)]\n".to_string()
                 } else {
                     format!("{}\n", target_code.trim())
                 }
             }
             TargetLanguage::Rust => {
                 if is_branchless {
-                    format!("let {} = ({} & mask) | ({} & !mask);\n", b_var, b_a, b_b)
+                    "let val = (a & mask) | (b & !mask);\n".to_string()
                 } else if is_result {
                     "fn parse_val(input: &str) -> Result<i32, &'static str> {\n    input.parse::<i32>().map_err(|_| \"invalid number\")\n}\n".to_string()
                 } else if is_async {
@@ -1499,7 +1356,7 @@ impl TargetLanguage {
                 } else if is_stream {
                     "let result: Vec<_> = items.iter().filter(|&&x| x > 0).map(|&x| x * 2).collect();\n".to_string()
                 } else if is_guard {
-                    format!("let {} = {}.as_ref()?;\n", guard_ptr, guard_ptr)
+                    "let target = target.as_ref()?;\n".to_string()
                 } else if is_crc {
                     "let crc = crc32_compute(&payload);\n".to_string()
                 } else if is_bucket {
@@ -1508,19 +1365,17 @@ impl TargetLanguage {
                 } else if is_cas {
                     "while atomic_val.compare_exchange_weak(cur, next, Ordering::SeqCst, Ordering::Relaxed).is_err() { cur = atomic_val.load(Ordering::Relaxed); }\n".to_string()
                 } else if is_div_guard {
-                    format!(
-                        "if {} == 0 {{ return Err(\"division by zero\"); }} Ok({} / {})\n",
-                        div_factor, div_base, div_factor
-                    )
+                    "if factor == 0 { return Err(\"division by zero\"); } Ok(base_val / factor)\n"
+                        .to_string()
                 } else if is_list {
-                    "let numbers: Vec<i32> = (1..=10).collect();\n".to_string()
+                    "let numbers: Vec<i32> = (0..1).collect();\n".to_string()
                 } else {
                     format!("{}\n", target_code.trim())
                 }
             }
             TargetLanguage::C => {
                 if is_branchless {
-                    format!("{} = ({} & mask) | ({} & ~mask);\n", b_var, b_a, b_b)
+                    "val = (a & mask) | (b & ~mask);\n".to_string()
                 } else if is_result {
                     "int parse_val(const char* input, int* out_val) {\n    if (!input || !out_val) return 0;\n    *out_val = atoi(input);\n    return 1;\n}\n".to_string()
                 } else if is_async {
@@ -1528,7 +1383,7 @@ impl TargetLanguage {
                 } else if is_stream {
                     "for (size_t i = 0; i < len; ++i) { if (arr[i] > 0) out[count++] = arr[i] * 2; }\n".to_string()
                 } else if is_guard {
-                    format!("if (!{}) return 0;\n", guard_ptr)
+                    "if (!ptr) return 0;\n".to_string()
                 } else if is_crc {
                     "unsigned int crc = crc32_compute(data, len);\n".to_string()
                 } else if is_bucket {
@@ -1536,19 +1391,16 @@ impl TargetLanguage {
                 } else if is_cas {
                     "while (!__sync_bool_compare_and_swap(&state, old_val, new_val)) { old_val = state; }\n".to_string()
                 } else if is_div_guard {
-                    format!(
-                        "if ({} == 0) return 0; return {} / {};\n",
-                        div_factor, div_base, div_factor
-                    )
+                    "if (factor == 0) return 0; return base_val / factor;\n".to_string()
                 } else if is_list {
-                    "int numbers[10] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10};\n".to_string()
+                    "int numbers[] = {0, 1};\n".to_string()
                 } else {
                     format!("{}\n", target_code.trim())
                 }
             }
             TargetLanguage::Cpp => {
                 if is_branchless {
-                    format!("{} = ({} & mask) | ({} & ~mask);\n", b_var, b_a, b_b)
+                    "val = (a & mask) | (b & ~mask);\n".to_string()
                 } else if is_result {
                     "#include <optional>\n#include <string>\n\nstd::optional<int> parse_val(const std::string& input) {\n    try { return std::stoi(input); } catch (...) { return std::nullopt; }\n}\n".to_string()
                 } else if is_async {
@@ -1557,7 +1409,7 @@ impl TargetLanguage {
                     "std::vector<int> res;\nfor (int x : items) if (x > 0) res.push_back(x * 2);\n"
                         .to_string()
                 } else if is_guard {
-                    format!("if (!{}) return nullptr;\n", guard_ptr)
+                    "if (!ptr) return nullptr;\n".to_string()
                 } else if is_crc {
                     "uint32_t crc = crc32_compute(data);\n".to_string()
                 } else if is_bucket {
@@ -1565,19 +1417,16 @@ impl TargetLanguage {
                 } else if is_cas {
                     "while (!head.compare_exchange_weak(cur, next));\n".to_string()
                 } else if is_div_guard {
-                    format!(
-                        "if ({} == 0) return 0; return {} / {};\n",
-                        div_factor, div_base, div_factor
-                    )
+                    "if (factor == 0) return 0; return base_val / factor;\n".to_string()
                 } else if is_list {
-                    "std::vector<int> numbers = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10};\n".to_string()
+                    "std::vector<int> numbers = {0, 1};\n".to_string()
                 } else {
                     format!("{}\n", target_code.trim())
                 }
             }
             TargetLanguage::Go => {
                 if is_branchless {
-                    format!("{} := ({} & mask) | ({} & ^mask)\n", b_var, b_a, b_b)
+                    "val := (a & mask) | (b & ^mask)\n".to_string()
                 } else if is_result {
                     "func ParseVal(input string) (int, error) {\n    return strconv.Atoi(input)\n}\n".to_string()
                 } else if is_async {
@@ -1585,7 +1434,7 @@ impl TargetLanguage {
                 } else if is_stream {
                     "var res []int\nfor _, x := range items { if x > 0 { res = append(res, x*2) } }\n".to_string()
                 } else if is_guard {
-                    format!("if {} == nil {{\n    return nil\n}}\n", guard_ptr)
+                    "if ptr == nil {\n    return nil\n}\n".to_string()
                 } else if is_crc {
                     "crc := crc32.ChecksumIEEE(payload)\n".to_string()
                 } else if is_bucket {
@@ -1593,9 +1442,9 @@ impl TargetLanguage {
                 } else if is_cas {
                     "for !atomic.CompareAndSwapPointer(&head, cur, next) { cur = atomic.LoadPointer(&head) }\n".to_string()
                 } else if is_div_guard {
-                    format!("if {} == 0 {{ return 0, errors.New(\"division by zero\") }}\nreturn {} / {}, nil\n", div_factor, div_base, div_factor)
+                    "if factor == 0 { return 0, errors.New(\"division by zero\") }\nreturn baseVal / factor, nil\n".to_string()
                 } else if is_list {
-                    "numbers := []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}\n".to_string()
+                    "numbers := []int{0, 1}\n".to_string()
                 } else {
                     format!("{}\n", target_code.trim())
                 }
@@ -1603,7 +1452,7 @@ impl TargetLanguage {
             TargetLanguage::JavaScript | TargetLanguage::TypeScript => {
                 let is_ts = *self == TargetLanguage::TypeScript;
                 if is_branchless {
-                    format!("const {} = ({} & mask) | ({} & ~mask);\n", b_var, b_a, b_b)
+                    "const val = (a & mask) | (b & ~mask);\n".to_string()
                 } else if is_result {
                     if is_ts {
                         "function parseVal(input: string): number | null {\n    const num = Number(input);\n    return isNaN(num) ? null : num;\n}\n".to_string()
@@ -1616,7 +1465,7 @@ impl TargetLanguage {
                 } else if is_stream {
                     "const res = items.filter(x => x > 0).map(x => x * 2);\n".to_string()
                 } else if is_guard {
-                    format!("if (!{}) return null;\n", guard_ptr)
+                    "if (!target) return null;\n".to_string()
                 } else if is_crc {
                     "const crc = crc32Compute(payload);\n".to_string()
                 } else if is_bucket {
@@ -1624,27 +1473,24 @@ impl TargetLanguage {
                 } else if is_cas {
                     "while (!atomicCompareSwap(cur, next)) { cur = getCur(); }\n".to_string()
                 } else if is_div_guard {
-                    format!(
-                        "if ({} === 0) return 0; return Math.floor({} / {});\n",
-                        div_factor, div_base, div_factor
-                    )
+                    "if (factor === 0) return 0; return Math.floor(baseVal / factor);\n".to_string()
                 } else if is_list {
-                    "const items = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];\n".to_string()
+                    "const items = [0, 1];\n".to_string()
                 } else {
                     format!("{}\n", target_code.trim())
                 }
             }
             TargetLanguage::Java => {
                 if is_branchless {
-                    format!("int {} = ({} & mask) | ({} & ~mask);\n", b_var, b_a, b_b)
+                    "int val = (a & mask) | (b & ~mask);\n".to_string()
                 } else if is_result {
                     "public static Optional<Integer> parseVal(String input) {\n    try { return Optional.of(Integer.parseInt(input)); } catch (NumberFormatException e) { return Optional.empty(); }\n}\n".to_string()
                 } else if is_async {
                     "CompletableFuture.supplyAsync(() -> item);\n".to_string()
                 } else if is_stream {
-                    "List<Integer> res = items.stream().filter(x -> x > 0).map(x => x * 2).toList();\n".to_string()
+                    "List<Integer> res = items.stream().filter(x -> x > 0).map(x -> x * 2).toList();\n".to_string()
                 } else if is_guard {
-                    format!("if ({} == null) return Optional.empty();\n", guard_ptr)
+                    "if (target == null) return Optional.empty();\n".to_string()
                 } else if is_crc {
                     "long crc = Crc32Util.compute(payload);\n".to_string()
                 } else if is_bucket {
@@ -1652,19 +1498,16 @@ impl TargetLanguage {
                 } else if is_cas {
                     "while (!head.compareAndSet(cur, next)) { cur = head.get(); }\n".to_string()
                 } else if is_div_guard {
-                    format!(
-                        "if ({} == 0) return 0; return {} / {};\n",
-                        div_factor, div_base, div_factor
-                    )
+                    "if (factor == 0) return 0; return baseVal / factor;\n".to_string()
                 } else if is_list {
-                    "int[] numbers = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10};\n".to_string()
+                    "int[] numbers = {0, 1};\n".to_string()
                 } else {
                     format!("{}\n", target_code.trim())
                 }
             }
             TargetLanguage::CSharp => {
                 if is_branchless {
-                    format!("int {} = ({} & mask) | ({} & ~mask);\n", b_var, b_a, b_b)
+                    "int val = (a & mask) | (b & ~mask);\n".to_string()
                 } else if is_result {
                     "public static bool TryParseVal(string input, out int result) => int.TryParse(input, out result);\n".to_string()
                 } else if is_async {
@@ -1672,7 +1515,7 @@ impl TargetLanguage {
                 } else if is_stream {
                     "var res = items.Where(x => x > 0).Select(x => x * 2).ToList();\n".to_string()
                 } else if is_guard {
-                    format!("if ({} is null) return null;\n", guard_ptr)
+                    "if (target is null) return null;\n".to_string()
                 } else if is_crc {
                     "uint crc = Crc32Util.Compute(payload);\n".to_string()
                 } else if is_bucket {
@@ -1681,19 +1524,16 @@ impl TargetLanguage {
                 } else if is_cas {
                     "while (Interlocked.CompareExchange(ref head, next, cur) != cur) { cur = head; }\n".to_string()
                 } else if is_div_guard {
-                    format!(
-                        "if ({} == 0) return 0; return {} / {};\n",
-                        div_factor, div_base, div_factor
-                    )
+                    "if (factor == 0) return 0; return baseVal / factor;\n".to_string()
                 } else if is_list {
-                    "int[] items = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 };\n".to_string()
+                    "int[] items = { 0, 1 };\n".to_string()
                 } else {
                     format!("{}\n", target_code.trim())
                 }
             }
             TargetLanguage::Swift => {
                 if is_branchless {
-                    format!("let {} = ({} & mask) | ({} & ~mask)\n", b_var, b_a, b_b)
+                    "let val = (a & mask) | (b & ~mask)\n".to_string()
                 } else if is_result {
                     "func parseVal(_ input: String) -> Int? { Int(input) }\n".to_string()
                 } else if is_async {
@@ -1701,10 +1541,7 @@ impl TargetLanguage {
                 } else if is_stream {
                     "let res = items.filter { $0 > 0 }.map { $0 * 2 }\n".to_string()
                 } else if is_guard {
-                    format!(
-                        "guard let {} = {} else {{ return nil }}\n",
-                        guard_ptr, guard_ptr
-                    )
+                    "guard let target = target else { return nil }\n".to_string()
                 } else if is_crc {
                     "let crc = crc32Compute(payload)\n".to_string()
                 } else if is_bucket {
@@ -1712,22 +1549,16 @@ impl TargetLanguage {
                 } else if is_cas {
                     "while !compareAndSwap(&head, cur, next) { cur = head }\n".to_string()
                 } else if is_div_guard {
-                    format!(
-                        "guard {} != 0 else {{ return 0 }}; return {} / {}\n",
-                        div_factor, div_base, div_factor
-                    )
+                    "guard factor != 0 else { return 0 }; return baseVal / factor\n".to_string()
                 } else if is_list {
-                    "let items = Array(1...10)\n".to_string()
+                    "let items = Array(0...1)\n".to_string()
                 } else {
                     format!("{}\n", target_code.trim())
                 }
             }
             TargetLanguage::Kotlin => {
                 if is_branchless {
-                    format!(
-                        "val {} = ({} and mask) or ({} and mask.inv())\n",
-                        b_var, b_a, b_b
-                    )
+                    "val result = (a and mask) or (b and mask.inv())\n".to_string()
                 } else if is_result {
                     "fun parseVal(input: String): Int? = input.toIntOrNull()\n".to_string()
                 } else if is_async {
@@ -1735,7 +1566,7 @@ impl TargetLanguage {
                 } else if is_stream {
                     "val res = items.filter { it > 0 }.map { it * 2 }\n".to_string()
                 } else if is_guard {
-                    format!("val nonNull_{} = {} ?: return null\n", guard_ptr, guard_ptr)
+                    "val nonNullTarget = target ?: return null\n".to_string()
                 } else if is_crc {
                     "val crc = crc32Compute(payload)\n".to_string()
                 } else if is_bucket {
@@ -1743,19 +1574,16 @@ impl TargetLanguage {
                 } else if is_cas {
                     "while (!head.compareAndSet(cur, next)) { cur = head.get() }\n".to_string()
                 } else if is_div_guard {
-                    format!(
-                        "if ({} == 0) return 0 else {} / {}\n",
-                        div_factor, div_base, div_factor
-                    )
+                    "if (factor == 0) return 0 else baseVal / factor\n".to_string()
                 } else if is_list {
-                    "val items = (1..10).toList()\n".to_string()
+                    "val items = (0..1).toList()\n".to_string()
                 } else {
                     format!("{}\n", target_code.trim())
                 }
             }
             TargetLanguage::Php => {
                 if is_branchless {
-                    format!("${} = (${} & $mask) | (${} & ~$mask);\n", b_var, b_a, b_b)
+                    "$val = ($a & $mask) | ($b & ~$mask);\n".to_string()
                 } else if is_result {
                     "function parseVal(string $input): ?int { return is_numeric($input) ? (int)$input : null; }\n".to_string()
                 } else if is_async {
@@ -1765,7 +1593,7 @@ impl TargetLanguage {
                     "$res = array_map(fn($x) => $x * 2, array_filter($items, fn($x) => $x > 0));\n"
                         .to_string()
                 } else if is_guard {
-                    format!("if (${} === null) return null;\n", guard_ptr)
+                    "if ($target === null) return null;\n".to_string()
                 } else if is_crc {
                     "$crc = crc32($payload);\n".to_string()
                 } else if is_bucket {
@@ -1773,22 +1601,16 @@ impl TargetLanguage {
                 } else if is_cas {
                     "while (!atomic_cas($head, $cur, $next)) { $cur = $head; }\n".to_string()
                 } else if is_div_guard {
-                    format!(
-                        "if (${} === 0) return 0; return intdiv(${}, ${});\n",
-                        div_factor, div_base, div_factor
-                    )
+                    "if ($factor === 0) return 0; return intdiv($baseVal, $factor);\n".to_string()
                 } else if is_list {
-                    "$items = range(1, 10);\n".to_string()
+                    "$items = range(0, 1);\n".to_string()
                 } else {
                     format!("{}\n", target_code.trim())
                 }
             }
             TargetLanguage::Sql => {
                 if is_branchless {
-                    format!(
-                        "SELECT ({} & mask) | ({} & ~mask) AS {} FROM table_name;\n",
-                        b_a, b_b, b_var
-                    )
+                    "SELECT (a & mask) | (b & ~mask) AS val FROM table_name;\n".to_string()
                 } else if is_result {
                     "SELECT CASE WHEN val ~ '^[0-9]+$' THEN CAST(val AS INTEGER) ELSE NULL END FROM dataset;\n".to_string()
                 } else if is_async {
@@ -1796,7 +1618,7 @@ impl TargetLanguage {
                 } else if is_stream {
                     "SELECT val * 2 FROM dataset WHERE val > 0;\n".to_string()
                 } else if is_guard {
-                    format!("WHERE {} IS NOT NULL\n", guard_ptr)
+                    "WHERE target IS NOT NULL\n".to_string()
                 } else if is_crc {
                     "SELECT hashtext(payload) AS crc FROM table_name;\n".to_string()
                 } else if is_bucket {
@@ -1804,19 +1626,17 @@ impl TargetLanguage {
                 } else if is_cas {
                     "UPDATE state_table SET state = :next WHERE state = :cur;\n".to_string()
                 } else if is_div_guard {
-                    format!(
-                        "SELECT CASE WHEN {} = 0 THEN 0 ELSE {} / {} END FROM data;\n",
-                        div_factor, div_base, div_factor
-                    )
+                    "SELECT CASE WHEN factor = 0 THEN 0 ELSE base_val / factor END FROM data;\n"
+                        .to_string()
                 } else if is_list {
-                    "SELECT unnest(ARRAY[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]) AS item;\n".to_string()
+                    "SELECT unnest(ARRAY[0, 1]) AS item;\n".to_string()
                 } else {
                     format!("{}\n", target_code.trim())
                 }
             }
             TargetLanguage::Bash => {
                 if is_branchless {
-                    format!("{}=$(( ({} & mask) | ({} & ~mask) ))\n", b_var, b_a, b_b)
+                    "val=$(( (a & mask) | (b & ~mask) ))\n".to_string()
                 } else if is_result {
                     "parse_val() { [[ \"$1\" =~ ^[0-9]+$ ]] && echo \"$1\" || return 1; }\n"
                         .to_string()
@@ -1825,7 +1645,7 @@ impl TargetLanguage {
                 } else if is_stream {
                     "printf '%s\\n' \"${items[@]}\" | awk '$1 > 0 { print $1 * 2 }'\n".to_string()
                 } else if is_guard {
-                    format!("[ -z \"${}\" ] && return 1\n", guard_ptr)
+                    "[ -z \"$target\" ] && return 1\n".to_string()
                 } else if is_crc {
                     "crc=$(cksum \"$payload\" | awk '{print $1}')\n".to_string()
                 } else if is_bucket {
@@ -1833,12 +1653,9 @@ impl TargetLanguage {
                 } else if is_cas {
                     "ln -s /tmp/lock /tmp/active_lock 2>/dev/null\n".to_string()
                 } else if is_div_guard {
-                    format!(
-                        "[ \"${}\" -eq 0 ] && echo 0 || echo $(({} / {}))\n",
-                        div_factor, div_base, div_factor
-                    )
+                    "[ \"$factor\" -eq 0 ] && echo 0 || echo $((base_val / factor))\n".to_string()
                 } else if is_list {
-                    "items=(1 2 3 4 5 6 7 8 9 10)\n".to_string()
+                    "items=(0 1)\n".to_string()
                 } else {
                     format!("{}\n", target_code.trim())
                 }

@@ -6,6 +6,9 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicU8, Ordering};
 use std::time::Duration;
 
+pub const ROUTE_AUTH_VERIFY: &str = "/api/v1/auth/verify";
+pub const ROUTE_LICENSE_VERIFY: &str = "/api/v1/license/verify";
+
 const TIER_CODE_COMMUNITY: u8 = 0;
 const TIER_CODE_PRO: u8 = 1;
 
@@ -149,15 +152,6 @@ impl AuthClient {
                         return LicenseTier::Pro;
                     }
                 }
-            } else if let Ok(payload) = crate::crypto::parse_license_token_payload(&token) {
-                let now = std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .map(|d| d.as_secs())
-                    .unwrap_or(0);
-                if payload.tier == "PRO" && now <= payload.expires_at {
-                    self.set_cached_tier(LicenseTier::Pro);
-                    return LicenseTier::Pro;
-                }
             }
         }
 
@@ -171,29 +165,15 @@ impl AuthClient {
             let within_grace_period =
                 now.saturating_sub(stored.last_verified_at) <= OFFLINE_GRACE_PERIOD_SECS;
 
-            if stored.tier.is_pro() && is_not_expired && within_grace_period {
-                if !secret.is_empty() {
-                    if let Ok(payload) = crate::crypto::verify_license_token(
-                        &stored.token,
-                        Some(&stored.license_key),
-                        &secret,
-                    ) {
-                        if payload.tier == "PRO"
-                            && (payload.machine_id == current_machine_id
-                                || payload.machine_id.is_empty())
-                        {
-                            self.set_cached_tier(LicenseTier::Pro);
-                            return LicenseTier::Pro;
-                        }
-                    }
-                } else if let Ok(payload) =
-                    crate::crypto::parse_license_token_payload(&stored.token)
-                {
+            if stored.tier.is_pro() && is_not_expired && within_grace_period && !secret.is_empty() {
+                if let Ok(payload) = crate::crypto::verify_license_token(
+                    &stored.token,
+                    Some(&stored.license_key),
+                    &secret,
+                ) {
                     if payload.tier == "PRO"
-                        && payload.license_key == stored.license_key
                         && (payload.machine_id == current_machine_id
                             || payload.machine_id.is_empty())
-                        && now <= payload.expires_at
                     {
                         self.set_cached_tier(LicenseTier::Pro);
                         return LicenseTier::Pro;
@@ -210,7 +190,8 @@ impl AuthClient {
         license_key: &str,
         machine_id: &str,
     ) -> Result<LicenseResponse, AuthError> {
-        let url = format!("{}/api/v1/license/verify", self.server_url);
+        let base = self.server_url.trim_end_matches('/');
+        let url = format!("{}{}", base, ROUTE_AUTH_VERIFY);
         let req_body = LicenseRequest {
             license_key: license_key.to_string(),
             machine_id: machine_id.to_string(),

@@ -847,7 +847,9 @@ impl<'a> StructuredCLowerer<'a> {
                 continue;
             }
 
-            if let [LowerToken::KeywordType, LowerToken::KeywordStruct, ..] = &self.tokens[self.pos..] {
+            if let [LowerToken::KeywordType, LowerToken::KeywordStruct, ..] =
+                &self.tokens[self.pos..]
+            {
                 self.pos += 1; // skip type
                 let st = self.parse_struct()?;
                 items.push(AstItem::Struct(st));
@@ -1497,7 +1499,9 @@ impl<'a> StructuredCLowerer<'a> {
                     return self.parse_array_decl(&var_name);
                 }
 
-                if let [LowerToken::Ident(id), LowerToken::Bang, LowerToken::LBracket, ..] = &self.tokens[self.pos..] {
+                if let [LowerToken::Ident(id), LowerToken::Bang, LowerToken::LBracket, ..] =
+                    &self.tokens[self.pos..]
+                {
                     if id == "vec" {
                         self.pos += 1;
                         self.pos += 1;
@@ -1514,7 +1518,9 @@ impl<'a> StructuredCLowerer<'a> {
             }
             LowerToken::Ident(ref name) => {
                 // vec![1, 2, 3]
-                if let [LowerToken::Ident(id), LowerToken::Bang, LowerToken::LBracket, ..] = &self.tokens[self.pos..] {
+                if let [LowerToken::Ident(id), LowerToken::Bang, LowerToken::LBracket, ..] =
+                    &self.tokens[self.pos..]
+                {
                     if id == "vec" {
                         self.pos += 1;
                         self.pos += 1;
@@ -1525,7 +1531,9 @@ impl<'a> StructuredCLowerer<'a> {
 
                 // C pointer declaration: int* p = 0;
                 if is_known_type(name) {
-                    if let [LowerToken::Ident(_), LowerToken::Star, LowerToken::Ident(var), ..] = &self.tokens[self.pos..] {
+                    if let [LowerToken::Ident(_), LowerToken::Star, LowerToken::Ident(var), ..] =
+                        &self.tokens[self.pos..]
+                    {
                         let ty = format!("{}*", name);
                         let var_name = var.clone();
                         self.pos += 1;
@@ -1545,7 +1553,9 @@ impl<'a> StructuredCLowerer<'a> {
 
                 // C fixed array: int a[5] = {1, 2, 3, 4, 5};
                 if is_known_type(name) {
-                    if let [LowerToken::Ident(_), LowerToken::Ident(var), LowerToken::LBracket, ..] = &self.tokens[self.pos..] {
+                    if let [LowerToken::Ident(_), LowerToken::Ident(var), LowerToken::LBracket, ..] =
+                        &self.tokens[self.pos..]
+                    {
                         let var_name = var.clone();
                         self.pos += 1; // skip type
                         self.pos += 1; // skip var
@@ -1625,7 +1635,9 @@ impl<'a> StructuredCLowerer<'a> {
                         return self.parse_array_decl(&var_name);
                     }
 
-                    if let [LowerToken::Ident(id), LowerToken::Bang, LowerToken::LBracket, ..] = &self.tokens[self.pos..] {
+                    if let [LowerToken::Ident(id), LowerToken::Bang, LowerToken::LBracket, ..] =
+                        &self.tokens[self.pos..]
+                    {
                         if id == "vec" {
                             self.pos += 1;
                             self.pos += 1;
@@ -2508,7 +2520,9 @@ pub fn try_lower_source_to_c_ir(source: &str, lang_or_ext: &str) -> Result<Strin
             }
         }
 
-        if let [LowerToken::KeywordType, LowerToken::KeywordStruct, ..] = &lowerer.tokens[lowerer.pos..] {
+        if let [LowerToken::KeywordType, LowerToken::KeywordStruct, ..] =
+            &lowerer.tokens[lowerer.pos..]
+        {
             lowerer.pos += 1; // skip type
             match lowerer.parse_struct() {
                 Ok(st) => {
@@ -2561,5 +2575,3 @@ pub fn try_lower_source_to_c_ir(source: &str, lang_or_ext: &str) -> Result<Strin
 
     Ok(format!("{}\n{}\n{}\n", guard_prefix, all_c_code, harness))
 }
-
-
