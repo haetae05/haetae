@@ -7,7 +7,7 @@
   "license": "SEE LICENSE IN LICENSE",
   "repository": {
     "type": "git",
-    "url": "https://github.com/startup0025-spec/haetae05"
+    "url": "https://github.com/haetae05/haetae.git"
   },
   "engines": {
     "vscode": "^1.90.0"

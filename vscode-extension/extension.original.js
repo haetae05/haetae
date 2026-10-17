@@ -16,6 +16,7 @@ const userCargoBin = process.env.USERPROFILE
 
 let globalResearchEnabled = false;
 let activeRefactorThread = null;
+let extensionSecrets = null;
 
 function getHaetaeBinary() {
     const configPath = vscode.workspace.getConfiguration('haetae').get('binaryPath');
@@ -53,10 +54,70 @@ function getHaetaeBinary() {
     return process.platform === 'win32' ? CONFIG.HAETAE_WIN_BIN_NAME : CONFIG.HAETAE_UNIX_BIN_NAME;
 }
 
-function runHaetaeCommand(args, inputData = null) {
+async function getStoredLicenseToken() {
+    if (!extensionSecrets) {
+        return '';
+    }
+    try {
+        const token = await extensionSecrets.get(CONFIG.SECRET_KEY_LICENSE_TOKEN);
+        return token || '';
+    } catch {
+        return '';
+    }
+}
+
+async function getStoredLicenseKey() {
+    if (!extensionSecrets) {
+        return '';
+    }
+    try {
+        const key = await extensionSecrets.get(CONFIG.SECRET_KEY_LICENSE_KEY);
+        return key || '';
+    } catch {
+        return '';
+    }
+}
+
+async function migrateStoredLicense(secrets) {
+    if (!secrets) {
+        return;
+    }
+    try {
+        const existingKey = await secrets.get(CONFIG.SECRET_KEY_LICENSE_KEY);
+        const existingToken = await secrets.get(CONFIG.SECRET_KEY_LICENSE_TOKEN);
+        if (!existingKey || !existingToken) {
+            const homeDir = process.env.USERPROFILE || process.env.HOME || '';
+            const jwtPath = path.join(homeDir, '.haetae', 'license.jwt');
+            if (fs.existsSync(jwtPath)) {
+                const raw = fs.readFileSync(jwtPath, 'utf8');
+                const parsed = JSON.parse(raw);
+                if (parsed) {
+                    if (!existingKey && parsed.license_key) {
+                        await secrets.store(CONFIG.SECRET_KEY_LICENSE_KEY, parsed.license_key);
+                    }
+                    if (!existingToken && parsed.token) {
+                        await secrets.store(CONFIG.SECRET_KEY_LICENSE_TOKEN, parsed.token);
+                    }
+                }
+            }
+        }
+    } catch {
+    }
+}
+
+async function runHaetaeCommand(args, inputData = null, extraEnv = null) {
+    const token = await getStoredLicenseToken();
+    const childEnv = {
+        ...process.env,
+        ...(token ? { [CONFIG.ENV_LICENSE_TOKEN]: token } : {}),
+        ...(extraEnv || {})
+    };
     return new Promise((resolve) => {
         const bin = getHaetaeBinary();
-        const child = cp.execFile(bin, args, { maxBuffer: CONFIG.EXEC_MAX_BUFFER_BYTES }, (err, stdout, stderr) => {
+        const child = cp.execFile(bin, args, {
+            maxBuffer: CONFIG.EXEC_MAX_BUFFER_BYTES,
+            env: childEnv
+        }, (err, stdout, stderr) => {
             if (err) {
                 const exitCode = (typeof err.code === 'number') ? err.code : 1;
                 resolve({ code: exitCode, stdout: stdout || '', stderr: stderr || err.message });
@@ -69,6 +130,7 @@ function runHaetaeCommand(args, inputData = null) {
         }
     });
 }
+
 
 function checkOllamaReachable(host = null) {
     const configuredHost = host || vscode.workspace.getConfiguration('haetae').get('ollamaHost') || CONFIG.OLLAMA_DEFAULT_HOST;
@@ -246,6 +308,9 @@ class HaetaeComment {
 }
 
 function activate(context) {
+    extensionSecrets = context.secrets;
+    migrateStoredLicense(context.secrets);
+
     const diagChannel = vscode.window.createOutputChannel('Haetae Diagnostics');
     context.subscriptions.push(diagChannel);
 
@@ -691,19 +756,67 @@ function activate(context) {
     });
     context.subscriptions.push(boostCommand);
 
-    const authCommand = vscode.commands.registerCommand('haetae.auth', async () => {
+    async function handleSetLicenseKey() {
+        const existingKey = await getStoredLicenseKey();
         const key = await vscode.window.showInputBox({
             prompt: 'Enter Haetae Pro License Key',
-            placeHolder: 'e.g. PRO-KEY-ENTERPRISE'
+            placeHolder: 'e.g. PRO-KEY-ENTERPRISE',
+            value: existingKey || '',
+            password: true,
+            ignoreFocusOut: true
         });
-        if (!key || key.trim() === '') return;
+        if (!key || key.trim().length === 0) {
+            return;
+        }
+        const trimmedKey = key.trim();
 
-        const res = await runHaetaeCommand(['auth', key.trim()]);
-        if (res.stdout.includes('License valid!')) {
-            vscode.window.showInformationMessage(`Haetae: ${res.stdout.trim()}`);
+        // Stop passing plain license key as command line argv; pass via environment variable or standard input to child process runner.
+        const authEnv = {
+            [CONFIG.ENV_LICENSE_KEY]: trimmedKey
+        };
+        const res = await runHaetaeCommand(['auth'], trimmedKey + '\n', authEnv);
+
+        let token = '';
+        if (res.stdout && res.stdout.length > 0) {
+            const tokenMatch = res.stdout.match(/Auth Token:\s*([^\r\n]+)/);
+            if (tokenMatch && tokenMatch[1]) {
+                token = tokenMatch[1].trim();
+            }
+        }
+
+        if (!token) {
+            try {
+                const homeDir = process.env.USERPROFILE || process.env.HOME || '';
+                const jwtPath = path.join(homeDir, '.haetae', 'license.jwt');
+                if (fs.existsSync(jwtPath)) {
+                    const raw = fs.readFileSync(jwtPath, 'utf8');
+                    const parsed = JSON.parse(raw);
+                    if (parsed && parsed.token) {
+                        token = parsed.token;
+                    }
+                }
+            } catch {
+            }
+        }
+
+        const isSuccess = res.stdout.includes('License valid!') || res.code === 0 || token.length > 0;
+        if (isSuccess) {
+            const resolvedToken = token || trimmedKey;
+            await context.secrets.store(CONFIG.SECRET_KEY_LICENSE_KEY, trimmedKey);
+            await context.secrets.store(CONFIG.SECRET_KEY_LICENSE_TOKEN, resolvedToken);
+            vscode.window.showInformationMessage(`Haetae: ${res.stdout.trim() || 'License key registered and stored in SecretStorage.'}`);
         } else {
             vscode.window.showErrorMessage(`Haetae Auth Failed: ${res.stdout || res.stderr}`);
         }
+    }
+
+    const setLicenseKeyCommand = vscode.commands.registerCommand(CONFIG.CMD_SET_LICENSE_KEY, async () => {
+        await handleSetLicenseKey();
+    });
+    context.subscriptions.push(setLicenseKeyCommand);
+
+    const authCommand = vscode.commands.registerCommand(CONFIG.CMD_AUTH, async () => {
+        await handleSetLicenseKey();
     });
     context.subscriptions.push(authCommand);
 
@@ -738,6 +851,39 @@ function activate(context) {
         }
     });
     context.subscriptions.push(customizeShortcutsCommand);
+
+    if (typeof vscode.window.onDidStartTerminalShellExecution === 'function') {
+        const shellIntegrationSub = vscode.window.onDidStartTerminalShellExecution(async (event) => {
+            try {
+                const commandLine = event.commandLine ? event.commandLine.value : '';
+                if (!commandLine) {
+                    return;
+                }
+                const trimmed = commandLine.trim();
+                if (trimmed.startsWith('haetae inline ') || trimmed.startsWith('haetae refactor ')) {
+                    const stream = event.read();
+                    let output = '';
+                    for await (const chunk of stream) {
+                        output += chunk;
+                    }
+                    const editor = vscode.window.activeTextEditor;
+                    if (editor && output.trim().length > 0) {
+                        const cleanCode = output.trim();
+                        await editor.edit(editBuilder => {
+                            if (trimmed.startsWith('haetae inline ')) {
+                                editBuilder.insert(editor.selection.active, cleanCode);
+                            } else {
+                                editBuilder.replace(editor.selection, cleanCode);
+                            }
+                        });
+                    }
+                }
+            } catch {
+                // Shell integration buffer sync graceful fallback
+            }
+        });
+        context.subscriptions.push(shellIntegrationSub);
+    }
 }
 
 function deactivate() {}

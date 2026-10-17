@@ -18,11 +18,11 @@
 			
 			<Property Id="Microsoft.VisualStudio.Code.ExecutesCode" Value="true" />
 			
-			<Property Id="Microsoft.VisualStudio.Services.Links.Source" Value="https://github.com/startup0025-spec/haetae05.git" />
-			<Property Id="Microsoft.VisualStudio.Services.Links.Getstarted" Value="https://github.com/startup0025-spec/haetae05.git" />
-			<Property Id="Microsoft.VisualStudio.Services.Links.GitHub" Value="https://github.com/startup0025-spec/haetae05.git" />
-			<Property Id="Microsoft.VisualStudio.Services.Links.Support" Value="https://github.com/startup0025-spec/haetae05/issues" />
-			<Property Id="Microsoft.VisualStudio.Services.Links.Learn" Value="https://github.com/startup0025-spec/haetae05#readme" />
+			<Property Id="Microsoft.VisualStudio.Services.Links.Source" Value="https://github.com/haetae05/haetae.git" />
+			<Property Id="Microsoft.VisualStudio.Services.Links.Getstarted" Value="https://github.com/haetae05/haetae.git" />
+			<Property Id="Microsoft.VisualStudio.Services.Links.GitHub" Value="https://github.com/haetae05/haetae.git" />
+			<Property Id="Microsoft.VisualStudio.Services.Links.Support" Value="https://github.com/haetae05/haetae/issues" />
+			<Property Id="Microsoft.VisualStudio.Services.Links.Learn" Value="https://github.com/haetae05/haetae#readme" />
 			
 			<Property Id="Microsoft.VisualStudio.Services.GitHubFlavoredMarkdown" Value="true" />
 			<Property Id="Microsoft.VisualStudio.Services.Content.Pricing" Value="Free"/>
