@@ -7,7 +7,7 @@
   "license": "SEE LICENSE IN LICENSE",
   "repository": {
     "type": "git",
-    "url": "https://github.com/haetae05/haetae"
+    "url": "https://github.com/startup0025-spec/haetae05"
   },
   "engines": {
     "vscode": "^1.90.0"
@@ -66,6 +66,12 @@
         "icon": "$(zap)"
       },
       {
+        "command": "haetae.setLicenseKey",
+        "title": "Haetae: Set License Key",
+        "category": "Haetae",
+        "icon": "$(key)"
+      },
+      {
         "command": "haetae.auth",
         "title": "Authenticate License Key",
         "category": "Haetae",
@@ -115,6 +121,11 @@
         "command": "haetae.verify",
         "key": "ctrl+alt+h",
         "mac": "cmd+alt+h",
+        "when": "editorTextFocus && !findWidgetVisible"
+      },
+      {
+        "command": "haetae.setLicenseKey",
+        "key": "ctrl+alt+a",
         "when": "editorTextFocus && !findWidgetVisible"
       },
       {

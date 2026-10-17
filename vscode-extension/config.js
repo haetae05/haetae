@@ -20,5 +20,12 @@ module.exports = {
     CLI_MAX_PREFIX_CHARS: 8192,
     CLI_MAX_SUFFIX_CHARS: 4096,
     RADIX_BASE_36: 36,
-    TEMP_RANDOM_SLICE_START: 2
+    TEMP_RANDOM_SLICE_START: 2,
+    SECRET_KEY_LICENSE_KEY: 'haetae_license_key',
+    SECRET_KEY_LICENSE_TOKEN: 'haetae_license_token',
+    ENV_LICENSE_KEY: 'HAETAE_LICENSE_KEY',
+    ENV_LICENSE_TOKEN: 'HAETAE_LICENSE_TOKEN',
+    CMD_SET_LICENSE_KEY: 'haetae.setLicenseKey',
+    CMD_AUTH: 'haetae.auth'
 };
+

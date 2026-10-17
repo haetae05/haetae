@@ -4,14 +4,6 @@ use haetae_core::config::{
 };
 use std::collections::HashMap;
 
-const HEX_PREFIX_LEN: usize = 2;
-const SHIFT_MASK_32_BIT: i64 = 31;
-const SIZEOF_U16: usize = 2;
-const SIZEOF_U32: usize = 4;
-const SIZEOF_U64: usize = 8;
-const MIN_DECL_WORDS: usize = 2;
-const SPLIT_ASSIGNMENT_PARTS: usize = 2;
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Token {
     Ident(String),
@@ -62,7 +54,7 @@ pub fn tokenize(input: &str) -> Vec<Token> {
         if c.is_ascii_digit() {
             let mut num_str = String::new();
             if c == '0' && i + 1 < chars.len() && (chars[i + 1] == 'x' || chars[i + 1] == 'X') {
-                i += HEX_PREFIX_LEN;
+                i += "0x".len();
                 while i < chars.len() && chars[i].is_ascii_hexdigit() {
                     num_str.push(chars[i]);
                     i += 1;
@@ -338,13 +330,13 @@ impl<'a> ExprParser<'a> {
                 Token::Shl => {
                     self.next();
                     let rhs = self.parse_additive()?;
-                    let safe_shift = (rhs & SHIFT_MASK_32_BIT) as u32;
+                    let safe_shift = (rhs & ((u32::BITS - 1) as i64)) as u32;
                     lhs = lhs.wrapping_shl(safe_shift);
                 }
                 Token::Shr => {
                     self.next();
                     let rhs = self.parse_additive()?;
-                    let safe_shift = (rhs & SHIFT_MASK_32_BIT) as u32;
+                    let safe_shift = (rhs & ((u32::BITS - 1) as i64)) as u32;
                     lhs = lhs.wrapping_shr(safe_shift);
                 }
                 _ => break,
@@ -639,20 +631,20 @@ impl<'a> ExprParser<'a> {
 pub fn get_type_size(type_str: &str) -> usize {
     let t = type_str.trim();
     if t.contains('*') {
-        return SIZEOF_U64;
+        return std::mem::size_of::<u64>();
     }
     if t.contains("char") || t.contains("bool") || t.contains("int8") {
         1
     } else if t.contains("short") || t.contains("int16") {
-        SIZEOF_U16
+        std::mem::size_of::<u16>()
     } else if t.contains("long")
         || t.contains("int64")
         || t.contains("double")
         || t.contains("size_t")
     {
-        SIZEOF_U64
+        std::mem::size_of::<u64>()
     } else {
-        SIZEOF_U32
+        std::mem::size_of::<u32>()
     }
 }
 
@@ -869,7 +861,7 @@ pub fn execute_function_lines(
         if trimmed.contains('[') && trimmed.contains(']') && !trimmed.contains('=') {
             let before_semi = trimmed.trim_end_matches(';');
             let words: Vec<&str> = before_semi.split_whitespace().collect();
-            if words.len() >= MIN_DECL_WORDS {
+            if words.len() > 1 {
                 let type_part = words[..words.len() - 1].join(" ");
                 let type_size = get_type_size(&type_part);
                 if let Some(var_part) = words.last() {
@@ -898,9 +890,8 @@ pub fn execute_function_lines(
             && trimmed.ends_with(';')
         {
             let stmt = trimmed.trim_end_matches(';');
-            let parts: Vec<&str> = stmt.splitn(SPLIT_ASSIGNMENT_PARTS, '=').collect();
-            if parts.len() == SPLIT_ASSIGNMENT_PARTS {
-                let left = parts[0].trim();
+            if let Some((left_raw, right_raw)) = stmt.split_once('=') {
+                let left = left_raw.trim();
                 if let (Some(b_o), Some(b_c)) = (left.find('['), left.find(']')) {
                     let arr_name = &left[..b_o];
                     let idx_str = &left[b_o + 1..b_c];
@@ -912,7 +903,7 @@ pub fn execute_function_lines(
                             return Err(VerifyError::CrashSignal(POSIX_SIGSEGV));
                         }
                     }
-                    let rhs_toks = tokenize(parts[1]);
+                    let rhs_toks = tokenize(right_raw);
                     let mut p_rhs = ExprParser::with_context(&rhs_toks, env, source, call_depth);
                     let val = p_rhs.parse_expression()?;
                     env.insert(format!("{}[{}]", arr_name, idx), val);
@@ -935,17 +926,16 @@ pub fn execute_function_lines(
 
         if is_var_decl && trimmed.contains('=') && trimmed.ends_with(';') {
             let decl = trimmed.trim_end_matches(';');
-            let parts: Vec<&str> = decl.splitn(SPLIT_ASSIGNMENT_PARTS, '=').collect();
-            if parts.len() == SPLIT_ASSIGNMENT_PARTS {
-                let type_size = get_type_size(parts[0]);
+            if let Some((left, right)) = decl.split_once('=') {
+                let type_size = get_type_size(left);
                 local_stack_bytes = local_stack_bytes.saturating_add(type_size);
                 if local_stack_bytes > MAX_STACK_FRAME_BYTES {
                     return Err(VerifyError::CrashSignal(POSIX_SIGSEGV));
                 }
-                let left_words: Vec<&str> = parts[0].split_whitespace().collect();
+                let left_words: Vec<&str> = left.split_whitespace().collect();
                 if let Some(var_name) = left_words.last() {
                     let cleaned_name = var_name.trim_start_matches('*').trim();
-                    let expr_toks = tokenize(parts[1]);
+                    let expr_toks = tokenize(right);
                     let mut parser = ExprParser::with_context(&expr_toks, env, source, call_depth);
                     let val = parser.parse_expression()?;
                     env.insert(cleaned_name.to_string(), val);
@@ -956,19 +946,116 @@ pub fn execute_function_lines(
 
         if !is_var_decl && trimmed.contains('=') && trimmed.ends_with(';') {
             let decl = trimmed.trim_end_matches(';');
-            let parts: Vec<&str> = decl.splitn(SPLIT_ASSIGNMENT_PARTS, '=').collect();
-            if parts.len() == SPLIT_ASSIGNMENT_PARTS {
-                let var_name = parts[0].trim();
-                let expr_toks = tokenize(parts[1]);
+            if let Some((left, right)) = decl.split_once('=') {
+                let left_trim = left.trim();
+                let expr_toks = tokenize(right);
                 let mut parser = ExprParser::with_context(&expr_toks, env, source, call_depth);
                 let val = parser.parse_expression()?;
-                env.insert(var_name.to_string(), val);
+                if let Some(var_name) = left_trim.strip_suffix('+') {
+                    let v = env
+                        .get(var_name.trim())
+                        .copied()
+                        .unwrap_or(0)
+                        .wrapping_add(val);
+                    env.insert(var_name.trim().to_string(), v);
+                } else if let Some(var_name) = left_trim.strip_suffix('-') {
+                    let v = env
+                        .get(var_name.trim())
+                        .copied()
+                        .unwrap_or(0)
+                        .wrapping_sub(val);
+                    env.insert(var_name.trim().to_string(), v);
+                } else if let Some(var_name) = left_trim.strip_suffix('*') {
+                    let v = env
+                        .get(var_name.trim())
+                        .copied()
+                        .unwrap_or(0)
+                        .wrapping_mul(val);
+                    env.insert(var_name.trim().to_string(), v);
+                } else if let Some(var_name) = left_trim.strip_suffix('^') {
+                    let v = env.get(var_name.trim()).copied().unwrap_or(0) ^ val;
+                    env.insert(var_name.trim().to_string(), v);
+                } else if let Some(var_name) = left_trim.strip_suffix('&') {
+                    let v = env.get(var_name.trim()).copied().unwrap_or(0) & val;
+                    env.insert(var_name.trim().to_string(), v);
+                } else if let Some(var_name) = left_trim.strip_suffix('|') {
+                    let v = env.get(var_name.trim()).copied().unwrap_or(0) | val;
+                    env.insert(var_name.trim().to_string(), v);
+                } else {
+                    env.insert(left_trim.to_string(), val);
+                }
                 continue;
             }
         }
     }
 
     Ok(0)
+}
+
+pub fn find_first_defined_function(source: &str) -> Option<(String, Vec<String>, Vec<String>)> {
+    for line in source.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed.starts_with('#') || trimmed.starts_with("//") {
+            continue;
+        }
+        if let Some(open_p) = trimmed.find('(') {
+            if let Some(close_p) = trimmed[open_p..].find(')') {
+                let close_abs = open_p + close_p;
+                let after_paren = trimmed[close_abs + 1..].trim();
+                if after_paren.starts_with('{') || after_paren.is_empty() {
+                    let before_paren = trimmed[..open_p].trim();
+                    if let Some(fn_name) = before_paren.split_whitespace().last() {
+                        let cleaned_name = fn_name.trim_start_matches('*').trim();
+                        if !cleaned_name.is_empty()
+                            && cleaned_name != "if"
+                            && cleaned_name != "while"
+                            && cleaned_name != "for"
+                            && cleaned_name != "switch"
+                        {
+                            if let Some((params, body)) =
+                                find_function_params_and_body(source, cleaned_name)
+                            {
+                                return Some((cleaned_name.to_string(), params, body));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    None
+}
+
+pub fn populate_top_level_declarations(source: &str, env: &mut HashMap<String, i64>) {
+    let mut depth: usize = 0;
+    for line in source.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed.starts_with('#') || trimmed.starts_with("//") {
+            continue;
+        }
+        for ch in trimmed.chars() {
+            if ch == '{' {
+                depth = depth.saturating_add(1);
+            } else if ch == '}' {
+                depth = depth.saturating_sub(1);
+            }
+        }
+        if depth == 0 && trimmed.ends_with(';') {
+            if let Some((left, right)) = trimmed.trim_end_matches(';').split_once('=') {
+                let left_words: Vec<&str> = left.split_whitespace().collect();
+                if let Some(var_name) = left_words.last() {
+                    let cleaned = var_name.trim_start_matches('*').trim();
+                    if !cleaned.is_empty() && !cleaned.contains('(') && !cleaned.contains('[') {
+                        let tokens = tokenize(right.trim());
+                        let mut parser = ExprParser::new(&tokens, env);
+                        if let Ok(val) = parser.parse_expression() {
+                            env.insert(cleaned.to_string(), val);
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
 pub fn evaluate_c_source(source: &str, payload: i64) -> Result<i32, VerifyError> {
@@ -1004,22 +1091,16 @@ pub fn evaluate_c_source(source: &str, payload: i64) -> Result<i32, VerifyError>
     let (func_params, target_lines) = if !chosen_fn.is_empty() {
         find_function_params_and_body(source, &chosen_fn)
             .or_else(|| find_function_params_and_body(source, "haetae_fuzz_entry"))
+            .or_else(|| find_first_defined_function(source).map(|(_, p, b)| (p, b)))
             .unwrap_or_default()
     } else {
-        find_function_params_and_body(source, "haetae_fuzz_entry").unwrap_or_default()
+        find_function_params_and_body(source, "haetae_fuzz_entry")
+            .or_else(|| find_first_defined_function(source).map(|(_, p, b)| (p, b)))
+            .unwrap_or_default()
     };
 
     let mut env = HashMap::new();
     env.insert("payload".to_string(), p_val);
-    env.insert("p".to_string(), p_val);
-    env.insert("p0".to_string(), p_val);
-    env.insert("p1".to_string(), p_val & 1);
-    env.insert("p2".to_string(), (p_val >> 1) & 1);
-    env.insert("base_val".to_string(), p_val);
-    env.insert("factor".to_string(), p_val & 1);
-    env.insert("a".to_string(), p_val);
-    env.insert("b".to_string(), p_val & 1);
-    env.insert("cond".to_string(), p_val);
 
     for (p_idx, p_name) in func_params.iter().enumerate() {
         if p_idx == 0 {
@@ -1030,6 +1111,8 @@ pub fn evaluate_c_source(source: &str, payload: i64) -> Result<i32, VerifyError>
             env.insert(p_name.clone(), v);
         }
     }
+
+    populate_top_level_declarations(source, &mut env);
 
     let lines_to_eval = if target_lines.is_empty() {
         source

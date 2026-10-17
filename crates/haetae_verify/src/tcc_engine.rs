@@ -3,9 +3,10 @@ use haetae_core::config::{
     CLANG_ENV_VAR, CLANG_FLAG_COMPILE_ONLY, CLANG_FLAG_FPIC, CLANG_FLAG_SHARED, CLANG_OPT_O0,
     CLANG_OPT_O2, CLANG_TEMP_PREFIX, COFF_FILE_HEADER_BYTES, COFF_NUM_SECTIONS_OFFSET,
     COFF_OPTHDR_SIZE_OFFSET, COFF_SECTION_HEADER_BYTES, COFF_SECTION_NAME_BYTES,
-    COFF_SECTION_RAW_PTR_OFFSET, COFF_SECTION_RAW_SIZE_OFFSET, MAX_STACK_FRAME_BYTES, POSIX_SIGFPE,
-    POSIX_SIGSEGV, WIN_EXCEPTION_ACCESS_VIOLATION, WIN_EXCEPTION_FLT_DIVIDE_BY_ZERO,
-    WIN_EXCEPTION_INT_DIVIDE_BY_ZERO, WIN_EXCEPTION_STACK_OVERFLOW,
+    COFF_SECTION_RAW_PTR_OFFSET, COFF_SECTION_RAW_SIZE_OFFSET, HEX_RADIX, MAX_STACK_FRAME_BYTES,
+    MODEL_DOWNLOAD_CHUNK_SIZE, POSIX_SIGFPE, POSIX_SIGSEGV, WIN_EXCEPTION_ACCESS_VIOLATION,
+    WIN_EXCEPTION_FLT_DIVIDE_BY_ZERO, WIN_EXCEPTION_INT_DIVIDE_BY_ZERO,
+    WIN_EXCEPTION_STACK_OVERFLOW,
 };
 #[allow(unused_imports)]
 use std::ffi::c_void;
@@ -15,38 +16,11 @@ use std::ffi::{CStr, CString};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
-const STACK_SAFETY_MARGIN_BYTES: usize = 65_536;
-const ALT_STACK_STORAGE_SIZE: usize = 131_072;
-const U16_SIZE_BYTES: usize = std::mem::size_of::<u16>();
-const U32_SIZE_BYTES: usize = std::mem::size_of::<u32>();
-const U64_SIZE_BYTES: usize = std::mem::size_of::<u64>();
-
-const ELF_MAGIC: [u8; 4] = [0x7f, b'E', b'L', b'F'];
-const ELF_CLASS_64: u8 = 2;
-const ELF_CLASS_OFFSET: usize = 4;
-const ELF64_MIN_HEADER_BYTES: usize = 64;
-const ELF64_SHOFF_OFFSET: usize = 40;
-const ELF64_SHENTSIZE_OFFSET: usize = 58;
-const ELF64_SHNUM_OFFSET: usize = 60;
-const ELF64_SHSTRNDX_OFFSET: usize = 62;
-const ELF64_SEC_NAME_OFFSET: usize = 0;
-const ELF64_SEC_OFFSET_OFFSET: usize = 24;
-const ELF64_SEC_SIZE_OFFSET: usize = 32;
-
 const COMPILER_ENV_VARS: &[&str] = &[CLANG_ENV_VAR, "HAETAE_CC_PATH", "CC"];
 #[cfg(target_os = "windows")]
 const CANDIDATE_COMPILERS: &[&str] = &["clang.exe", "clang", "gcc.exe", "gcc", "cc.exe", "cc"];
 #[cfg(not(target_os = "windows"))]
 const CANDIDATE_COMPILERS: &[&str] = &["clang", "gcc", "cc"];
-#[cfg(not(target_os = "windows"))]
-const STANDARD_UNIX_PATHS: &[&str] = &[
-    "/usr/bin/clang",
-    "/usr/local/bin/clang",
-    "/opt/homebrew/bin/clang",
-    "/usr/bin/gcc",
-    "/usr/local/bin/gcc",
-    "/usr/bin/cc",
-];
 
 static JIT_COUNTER: AtomicU64 = AtomicU64::new(1);
 
@@ -166,12 +140,25 @@ impl TccEngine {
             }
         }
 
+        #[cfg(target_os = "windows")]
+        let locator = "where";
         #[cfg(not(target_os = "windows"))]
-        {
-            for path_str in STANDARD_UNIX_PATHS {
-                let pb = PathBuf::from(path_str);
-                if pb.is_file() {
-                    return Some(pb);
+        let locator = "which";
+
+        for candidate in CANDIDATE_COMPILERS {
+            if let Ok(output) = std::process::Command::new(locator).arg(candidate).output() {
+                if output.status.success() {
+                    if let Ok(text) = std::str::from_utf8(&output.stdout) {
+                        for line in text.lines() {
+                            let trimmed = line.trim();
+                            if !trimmed.is_empty() {
+                                let pb = PathBuf::from(trimmed);
+                                if pb.is_file() {
+                                    return Some(pb);
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -188,12 +175,12 @@ impl TccEngine {
             return None;
         }
 
-        let num_sections_slice =
-            obj_bytes.get(COFF_NUM_SECTIONS_OFFSET..COFF_NUM_SECTIONS_OFFSET + U16_SIZE_BYTES)?;
+        let num_sections_slice = obj_bytes
+            .get(COFF_NUM_SECTIONS_OFFSET..COFF_NUM_SECTIONS_OFFSET + std::mem::size_of::<u16>())?;
         let num_sections = u16::from_le_bytes(num_sections_slice.try_into().ok()?) as usize;
 
-        let opt_hdr_slice =
-            obj_bytes.get(COFF_OPTHDR_SIZE_OFFSET..COFF_OPTHDR_SIZE_OFFSET + U16_SIZE_BYTES)?;
+        let opt_hdr_slice = obj_bytes
+            .get(COFF_OPTHDR_SIZE_OFFSET..COFF_OPTHDR_SIZE_OFFSET + std::mem::size_of::<u16>())?;
         let opt_hdr_size = u16::from_le_bytes(opt_hdr_slice.try_into().ok()?) as usize;
 
         let mut offset = COFF_FILE_HEADER_BYTES + opt_hdr_size;
@@ -204,13 +191,13 @@ impl TccEngine {
             let name_slice = obj_bytes.get(offset..offset + COFF_SECTION_NAME_BYTES)?;
             let raw_size_slice = obj_bytes.get(
                 offset + COFF_SECTION_RAW_SIZE_OFFSET
-                    ..offset + COFF_SECTION_RAW_SIZE_OFFSET + U32_SIZE_BYTES,
+                    ..offset + COFF_SECTION_RAW_SIZE_OFFSET + std::mem::size_of::<u32>(),
             )?;
             let raw_size = u32::from_le_bytes(raw_size_slice.try_into().ok()?) as usize;
 
             let raw_ptr_slice = obj_bytes.get(
                 offset + COFF_SECTION_RAW_PTR_OFFSET
-                    ..offset + COFF_SECTION_RAW_PTR_OFFSET + U32_SIZE_BYTES,
+                    ..offset + COFF_SECTION_RAW_PTR_OFFSET + std::mem::size_of::<u32>(),
             )?;
             let raw_ptr = u32::from_le_bytes(raw_ptr_slice.try_into().ok()?) as usize;
 
@@ -226,34 +213,73 @@ impl TccEngine {
     }
 
     pub fn extract_elf_text_section(obj_bytes: &[u8]) -> Option<Vec<u8>> {
-        if obj_bytes.len() < ELF64_MIN_HEADER_BYTES || !obj_bytes.starts_with(&ELF_MAGIC) {
+        #[repr(C)]
+        struct Elf64Hdr {
+            e_ident: [u8; HEX_RADIX as usize],
+            e_type: u16,
+            e_machine: u16,
+            e_version: u32,
+            e_entry: u64,
+            e_phoff: u64,
+            e_shoff: u64,
+            e_flags: u32,
+            e_ehsize: u16,
+            e_phentsize: u16,
+            e_phnum: u16,
+            e_shentsize: u16,
+            e_shnum: u16,
+            e_shstrndx: u16,
+        }
+
+        #[repr(C)]
+        struct Elf64Shdr {
+            sh_name: u32,
+            sh_type: u32,
+            sh_flags: u64,
+            sh_addr: u64,
+            sh_offset: u64,
+            sh_size: u64,
+            sh_link: u32,
+            sh_info: u32,
+            sh_addralign: u64,
+            sh_entsize: u64,
+        }
+
+        if obj_bytes.len() < std::mem::size_of::<Elf64Hdr>() || !obj_bytes.starts_with(b"\x7fELF") {
             return None;
         }
-        if obj_bytes.get(ELF_CLASS_OFFSET).copied() != Some(ELF_CLASS_64) {
+        if obj_bytes.get(std::mem::size_of::<u32>()).copied() != Some(1 << 1) {
             return None;
         }
 
+        let shoff_offset = std::mem::offset_of!(Elf64Hdr, e_shoff);
         let shoff = u64::from_le_bytes(
             obj_bytes
-                .get(ELF64_SHOFF_OFFSET..ELF64_SHOFF_OFFSET + U64_SIZE_BYTES)?
+                .get(shoff_offset..shoff_offset + std::mem::size_of::<u64>())?
                 .try_into()
                 .ok()?,
         ) as usize;
+
+        let shentsize_offset = std::mem::offset_of!(Elf64Hdr, e_shentsize);
         let shentsize = u16::from_le_bytes(
             obj_bytes
-                .get(ELF64_SHENTSIZE_OFFSET..ELF64_SHENTSIZE_OFFSET + U16_SIZE_BYTES)?
+                .get(shentsize_offset..shentsize_offset + std::mem::size_of::<u16>())?
                 .try_into()
                 .ok()?,
         ) as usize;
+
+        let shnum_offset = std::mem::offset_of!(Elf64Hdr, e_shnum);
         let shnum = u16::from_le_bytes(
             obj_bytes
-                .get(ELF64_SHNUM_OFFSET..ELF64_SHNUM_OFFSET + U16_SIZE_BYTES)?
+                .get(shnum_offset..shnum_offset + std::mem::size_of::<u16>())?
                 .try_into()
                 .ok()?,
         ) as usize;
+
+        let shstrndx_offset = std::mem::offset_of!(Elf64Hdr, e_shstrndx);
         let shstrndx = u16::from_le_bytes(
             obj_bytes
-                .get(ELF64_SHSTRNDX_OFFSET..ELF64_SHSTRNDX_OFFSET + U16_SIZE_BYTES)?
+                .get(shstrndx_offset..shstrndx_offset + std::mem::size_of::<u16>())?
                 .try_into()
                 .ok()?,
         ) as usize;
@@ -263,11 +289,14 @@ impl TccEngine {
         }
 
         let strtab_hdr_offset = shoff.checked_add(shstrndx.checked_mul(shentsize)?)?;
+        let sec_offset_offset = std::mem::offset_of!(Elf64Shdr, sh_offset);
+        let sec_size_offset = std::mem::offset_of!(Elf64Shdr, sh_size);
+
         let strtab_offset = u64::from_le_bytes(
             obj_bytes
                 .get(
-                    strtab_hdr_offset + ELF64_SEC_OFFSET_OFFSET
-                        ..strtab_hdr_offset + ELF64_SEC_OFFSET_OFFSET + U64_SIZE_BYTES,
+                    strtab_hdr_offset + sec_offset_offset
+                        ..strtab_hdr_offset + sec_offset_offset + std::mem::size_of::<u64>(),
                 )?
                 .try_into()
                 .ok()?,
@@ -275,8 +304,8 @@ impl TccEngine {
         let strtab_size = u64::from_le_bytes(
             obj_bytes
                 .get(
-                    strtab_hdr_offset + ELF64_SEC_SIZE_OFFSET
-                        ..strtab_hdr_offset + ELF64_SEC_SIZE_OFFSET + U64_SIZE_BYTES,
+                    strtab_hdr_offset + sec_size_offset
+                        ..strtab_hdr_offset + sec_size_offset + std::mem::size_of::<u64>(),
                 )?
                 .try_into()
                 .ok()?,
@@ -284,13 +313,14 @@ impl TccEngine {
 
         let strtab = obj_bytes.get(strtab_offset..strtab_offset.checked_add(strtab_size)?)?;
 
+        let sec_name_offset = std::mem::offset_of!(Elf64Shdr, sh_name);
         for i in 0..shnum {
             let sec_hdr_offset = shoff.checked_add(i.checked_mul(shentsize)?)?;
             let name_idx = u32::from_le_bytes(
                 obj_bytes
                     .get(
-                        sec_hdr_offset + ELF64_SEC_NAME_OFFSET
-                            ..sec_hdr_offset + ELF64_SEC_NAME_OFFSET + U32_SIZE_BYTES,
+                        sec_hdr_offset + sec_name_offset
+                            ..sec_hdr_offset + sec_name_offset + std::mem::size_of::<u32>(),
                     )?
                     .try_into()
                     .ok()?,
@@ -298,8 +328,8 @@ impl TccEngine {
             let sec_offset = u64::from_le_bytes(
                 obj_bytes
                     .get(
-                        sec_hdr_offset + ELF64_SEC_OFFSET_OFFSET
-                            ..sec_hdr_offset + ELF64_SEC_OFFSET_OFFSET + U64_SIZE_BYTES,
+                        sec_hdr_offset + sec_offset_offset
+                            ..sec_hdr_offset + sec_offset_offset + std::mem::size_of::<u64>(),
                     )?
                     .try_into()
                     .ok()?,
@@ -307,8 +337,8 @@ impl TccEngine {
             let sec_size = u64::from_le_bytes(
                 obj_bytes
                     .get(
-                        sec_hdr_offset + ELF64_SEC_SIZE_OFFSET
-                            ..sec_hdr_offset + ELF64_SEC_SIZE_OFFSET + U64_SIZE_BYTES,
+                        sec_hdr_offset + sec_size_offset
+                            ..sec_hdr_offset + sec_size_offset + std::mem::size_of::<u64>(),
                     )?
                     .try_into()
                     .ok()?,
@@ -541,7 +571,7 @@ static __thread volatile sig_atomic_t haetae_in_safe_call = 0;
 static __thread volatile sig_atomic_t haetae_caught_signal = 0;
 static __thread stack_t haetae_alt_stack;
 static __thread int haetae_alt_stack_initialized = 0;
-static __thread char haetae_alt_stack_storage[{alt_stack_size}] __attribute__((aligned(16)));
+static __thread char haetae_alt_stack_storage[{alt_stack_size}] __attribute__((aligned({hex_radix})));
 
 static void haetae_posix_signal_handler(int sig, siginfo_t* info, void* ucontext) {{
     (void)info;
@@ -693,8 +723,9 @@ __attribute__((visibility("default"))) int haetae_safe_call_multi(const long lon
 #endif
 "#,
             max_stack_bytes = MAX_STACK_FRAME_BYTES,
-            stack_margin = STACK_SAFETY_MARGIN_BYTES,
-            alt_stack_size = ALT_STACK_STORAGE_SIZE,
+            stack_margin = MODEL_DOWNLOAD_CHUNK_SIZE,
+            alt_stack_size = MODEL_DOWNLOAD_CHUNK_SIZE << 1,
+            hex_radix = HEX_RADIX,
             stack_overflow = WIN_EXCEPTION_STACK_OVERFLOW,
             int_div_zero = WIN_EXCEPTION_INT_DIVIDE_BY_ZERO,
             flt_div_zero = WIN_EXCEPTION_FLT_DIVIDE_BY_ZERO,
@@ -711,7 +742,7 @@ __attribute__((visibility("default"))) int haetae_safe_call_multi(const long lon
         #[cfg(not(target_os = "windows"))]
         let mut temp_paths = vec![c_path.clone(), lib_path.clone()];
 
-        // 1. Compile into native object file to extract genuine bytecode
+        // Compile into native object file to extract genuine bytecode
         let obj_cmd = std::process::Command::new(compiler_path)
             .arg(CLANG_FLAG_COMPILE_ONLY)
             .arg(CLANG_OPT_O0)
@@ -732,7 +763,7 @@ __attribute__((visibility("default"))) int haetae_safe_call_multi(const long lon
             }
         }
 
-        // 2. Compile into native shared library
+        // Compile into native shared library
         let mut lib_cmd = std::process::Command::new(compiler_path);
 
         #[cfg(target_os = "windows")]
@@ -773,7 +804,7 @@ __attribute__((visibility("default"))) int haetae_safe_call_multi(const long lon
             return Err(VerifyError::CompileError(stderr_msg));
         }
 
-        // 3. Load native shared library dynamically
+        // Load native shared library dynamically
         #[cfg(target_os = "windows")]
         let (handle, safe_call_fn, safe_call_multi_fn) = {
             let wide_path: Vec<u16> = lib_path
