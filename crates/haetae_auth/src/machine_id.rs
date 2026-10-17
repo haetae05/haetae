@@ -49,12 +49,26 @@ fn retrieve_machine_uuid() -> Option<String> {
         "/etc/machine-id",
         "/var/lib/dbus/machine-id",
         "/sys/class/dmi/id/product_uuid",
+        "/etc/hostid",
+        "/var/db/hostid",
+        "/proc/sys/kernel/random/boot_id",
     ];
     for path in candidate_paths {
         if let Ok(content) = std::fs::read_to_string(path) {
             let trimmed = content.trim();
             if !trimmed.is_empty() {
                 return Some(trimmed.to_string());
+            }
+        }
+    }
+
+    if let Ok(cgroup) = std::fs::read_to_string("/proc/self/cgroup") {
+        for line in cgroup.lines() {
+            if let Some(pos) = line.rfind('/') {
+                let id = line[pos + 1..].trim();
+                if id.len() >= SHA256_HEX_STRING_LEN {
+                    return Some(id.to_string());
+                }
             }
         }
     }
@@ -115,13 +129,18 @@ fn retrieve_mac_address() -> Option<String> {
     None
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(not(target_os = "windows"))]
 fn retrieve_mac_address() -> Option<String> {
     let net_paths = [
         "/sys/class/net/eth0/address",
+        "/sys/class/net/eth1/address",
         "/sys/class/net/en0/address",
+        "/sys/class/net/en1/address",
         "/sys/class/net/wlan0/address",
+        "/sys/class/net/wlp2s0/address",
         "/sys/class/net/ens3/address",
+        "/sys/class/net/ens4/address",
+        "/sys/class/net/enp0s3/address",
     ];
     for path in net_paths {
         if let Ok(mac) = std::fs::read_to_string(path) {
@@ -131,11 +150,6 @@ fn retrieve_mac_address() -> Option<String> {
             }
         }
     }
-    None
-}
-
-#[cfg(not(any(target_os = "windows", target_os = "linux")))]
-fn retrieve_mac_address() -> Option<String> {
     None
 }
 

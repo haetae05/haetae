@@ -21,6 +21,9 @@ const LF_LF_LEN: usize = LF_LF_DELIM.len();
 pub const ROUTE_HEALTH: &str = "/health";
 pub const ROUTE_API_HEALTH: &str = "/api/v1/health";
 pub const ROUTE_ROOT: &str = "/";
+pub const ROUTE_AUTH_VERIFY_V2: &str = "/api/v2/auth/verify";
+pub const ROUTE_WEBHOOKS_LEMONSQUEEZY: &str = "/api/v1/webhooks/lemonsqueezy";
+pub const ROUTE_ANALYTICS: &str = "/api/v1/analytics";
 
 pub const HTTP_STATUS_OK: u16 = HTTP_OK;
 pub const HTTP_STATUS_BAD_REQUEST: u16 = HTTP_BAD_REQUEST;
@@ -331,12 +334,12 @@ pub fn match_binary_route(path: &str) -> Option<(&'static str, &'static str)> {
     }
 }
 
-async fn serve_binary_file(
+async fn serve_file_stream(
     stream: &mut TcpStream,
     path: &Path,
-    filename: &str,
     content_type: &str,
     method: &str,
+    attachment_filename: Option<&str>,
 ) -> Result<(), AuthError> {
     let mut file = tokio::fs::File::open(path)
         .await
@@ -347,14 +350,20 @@ async fn serve_binary_file(
         .map_err(|e| AuthError::Network(e.to_string()))?;
     let file_len = metadata.len();
 
+    let disposition = if let Some(fname) = attachment_filename {
+        format!("Content-Disposition: attachment; filename=\"{}\"\r\n", fname)
+    } else {
+        String::new()
+    };
+
     let header = format!(
-        "{}\r\n{}\r\n{}\r\n{}\r\nContent-Type: {}\r\nContent-Disposition: attachment; filename=\"{}\"\r\nContent-Length: {}\r\n{}\r\n\r\n",
+        "{}\r\n{}\r\n{}\r\n{}\r\nContent-Type: {}\r\n{}Content-Length: {}\r\n{}\r\n\r\n",
         STATUS_LINE_OK,
         HEADER_CORS_ORIGIN,
         HEADER_CORS_METHODS,
         HEADER_CORS_HEADERS,
         content_type,
-        filename,
+        disposition,
         file_len,
         HEADER_CONNECTION_CLOSE
     );
@@ -389,60 +398,23 @@ async fn serve_binary_file(
     Ok(())
 }
 
-async fn serve_static_file(
+pub async fn serve_binary_file(
+    stream: &mut TcpStream,
+    path: &Path,
+    filename: &str,
+    content_type: &str,
+    method: &str,
+) -> Result<(), AuthError> {
+    serve_file_stream(stream, path, content_type, method, Some(filename)).await
+}
+
+pub async fn serve_static_file(
     stream: &mut TcpStream,
     path: &Path,
     mime_type: &str,
     method: &str,
 ) -> Result<(), AuthError> {
-    let mut file = tokio::fs::File::open(path)
-        .await
-        .map_err(|e| AuthError::Network(e.to_string()))?;
-    let metadata = file
-        .metadata()
-        .await
-        .map_err(|e| AuthError::Network(e.to_string()))?;
-    let file_len = metadata.len();
-
-    let header = format!(
-        "{}\r\n{}\r\n{}\r\n{}\r\nContent-Type: {}\r\nContent-Length: {}\r\n{}\r\n\r\n",
-        STATUS_LINE_OK,
-        HEADER_CORS_ORIGIN,
-        HEADER_CORS_METHODS,
-        HEADER_CORS_HEADERS,
-        mime_type,
-        file_len,
-        HEADER_CONNECTION_CLOSE
-    );
-
-    stream
-        .write_all(header.as_bytes())
-        .await
-        .map_err(|e| AuthError::Network(e.to_string()))?;
-
-    if method == "GET" {
-        let mut chunk_buf = vec![0u8; BUFFER_CHUNK_SIZE];
-        loop {
-            let read_bytes = file
-                .read(&mut chunk_buf)
-                .await
-                .map_err(|e| AuthError::Network(e.to_string()))?;
-            if read_bytes == 0 {
-                break;
-            }
-            stream
-                .write_all(&chunk_buf[0..read_bytes])
-                .await
-                .map_err(|e| AuthError::Network(e.to_string()))?;
-        }
-    }
-
-    stream
-        .flush()
-        .await
-        .map_err(|e| AuthError::Network(e.to_string()))?;
-    let _ = stream.shutdown().await;
-    Ok(())
+    serve_file_stream(stream, path, mime_type, method, None).await
 }
 
 pub async fn verify_lemonsqueezy_license(license_key: &str, instance_name: &str) -> bool {
@@ -501,6 +473,23 @@ pub async fn verify_lemonsqueezy_license(license_key: &str, instance_name: &str)
     }
 
     false
+}
+
+pub fn verify_lemonsqueezy_webhook_signature(
+    payload: &[u8],
+    signature_hex: &str,
+    webhook_secret: &str,
+) -> bool {
+    let clean_sig = signature_hex.trim();
+    let clean_secret = webhook_secret.trim();
+    if clean_sig.is_empty() || clean_secret.is_empty() {
+        return false;
+    }
+    let Ok(expected_sig) = crate::crypto::hex_decode(clean_sig) else {
+        return false;
+    };
+    let key = ring::hmac::Key::new(ring::hmac::HMAC_SHA256, clean_secret.as_bytes());
+    ring::hmac::verify(&key, payload, &expected_sig).is_ok()
 }
 
 pub fn resolve_license_secret() -> String {
@@ -575,6 +564,159 @@ pub async fn handle_verify(body_str: &str) -> String {
     }
 }
 
+#[derive(Debug, PartialEq, Eq)]
+pub enum HttpRoute {
+    Options,
+    Health,
+    AuthVerify,
+    LemonSqueezyWebhook,
+    Analytics,
+    BinaryArtifact(&'static str, &'static str),
+    DownloadsPath(String),
+    WebDirStatic(String),
+    RootHealth,
+    NotFound,
+}
+
+pub fn dispatch_route(method: &str, raw_path: &str) -> HttpRoute {
+    if method == "OPTIONS" {
+        return HttpRoute::Options;
+    }
+    let path = raw_path.split('?').next().unwrap_or(raw_path);
+    let normalized = path.strip_suffix('/').unwrap_or(path);
+
+    if (method == "GET" || method == "HEAD")
+        && (normalized == ROUTE_HEALTH || normalized == ROUTE_API_HEALTH)
+    {
+        return HttpRoute::Health;
+    }
+
+    if method == "POST"
+        && (normalized == ROUTE_AUTH_VERIFY
+            || normalized == ROUTE_LICENSE_VERIFY
+            || normalized == ROUTE_AUTH_VERIFY_V2)
+    {
+        return HttpRoute::AuthVerify;
+    }
+
+    if method == "POST" && normalized == ROUTE_WEBHOOKS_LEMONSQUEEZY {
+        return HttpRoute::LemonSqueezyWebhook;
+    }
+
+    if (method == "POST" || method == "GET") && normalized == ROUTE_ANALYTICS {
+        return HttpRoute::Analytics;
+    }
+
+    if method == "GET" || method == "HEAD" {
+        if let Some((filename, content_type)) = match_binary_route(path) {
+            return HttpRoute::BinaryArtifact(filename, content_type);
+        }
+        if let Some(relative_dl) = path.strip_prefix("/downloads/") {
+            if !relative_dl.is_empty() && !relative_dl.contains("..") {
+                return HttpRoute::DownloadsPath(relative_dl.to_string());
+            }
+        }
+        if path == ROUTE_ROOT {
+            return HttpRoute::RootHealth;
+        }
+        let clean = path.trim_start_matches('/');
+        if !clean.contains("..") {
+            return HttpRoute::WebDirStatic(clean.to_string());
+        }
+    }
+
+    HttpRoute::NotFound
+}
+
+pub fn extract_header_value(headers_str: &str, header_name: &str) -> Option<String> {
+    for line in headers_str.lines() {
+        if let Some(colon_pos) = line.find(':') {
+            let name = line[0..colon_pos].trim();
+            if name.eq_ignore_ascii_case(header_name) {
+                return Some(line[colon_pos + 1..].trim().to_string());
+            }
+        }
+    }
+    None
+}
+
+async fn send_cors_options(stream: &mut TcpStream) -> Result<(), AuthError> {
+    let cors_resp = format!(
+        "{}\r\n{}\r\n{}\r\n{}\r\nContent-Length: 0\r\n{}\r\n\r\n",
+        STATUS_LINE_OK,
+        HEADER_CORS_ORIGIN,
+        HEADER_CORS_METHODS,
+        HEADER_CORS_HEADERS,
+        HEADER_CONNECTION_CLOSE
+    );
+    stream
+        .write_all(cors_resp.as_bytes())
+        .await
+        .map_err(|e| AuthError::Network(e.to_string()))?;
+    stream
+        .flush()
+        .await
+        .map_err(|e| AuthError::Network(e.to_string()))?;
+    let _ = stream.shutdown().await;
+    Ok(())
+}
+
+async fn send_json_response(
+    stream: &mut TcpStream,
+    status: u16,
+    body: &str,
+    method: &str,
+) -> Result<(), AuthError> {
+    let status_line = match status {
+        HTTP_STATUS_OK => STATUS_LINE_OK,
+        HTTP_STATUS_BAD_REQUEST => STATUS_LINE_BAD_REQUEST,
+        HTTP_STATUS_NOT_FOUND => STATUS_LINE_NOT_FOUND,
+        _ => STATUS_LINE_INTERNAL_ERROR,
+    };
+    let header = format!(
+        "{}\r\n{}\r\n{}\r\n{}\r\nContent-Type: {}\r\nContent-Length: {}\r\n{}\r\n\r\n",
+        status_line,
+        HEADER_CORS_ORIGIN,
+        HEADER_CORS_METHODS,
+        HEADER_CORS_HEADERS,
+        MIME_JSON,
+        body.len(),
+        HEADER_CONNECTION_CLOSE
+    );
+    stream
+        .write_all(header.as_bytes())
+        .await
+        .map_err(|e| AuthError::Network(e.to_string()))?;
+    if method != "HEAD" {
+        stream
+            .write_all(body.as_bytes())
+            .await
+            .map_err(|e| AuthError::Network(e.to_string()))?;
+    }
+    stream
+        .flush()
+        .await
+        .map_err(|e| AuthError::Network(e.to_string()))?;
+    let _ = stream.shutdown().await;
+    Ok(())
+}
+
+async fn send_raw_response(
+    stream: &mut TcpStream,
+    response_data: &[u8],
+) -> Result<(), AuthError> {
+    stream
+        .write_all(response_data)
+        .await
+        .map_err(|e| AuthError::Network(e.to_string()))?;
+    stream
+        .flush()
+        .await
+        .map_err(|e| AuthError::Network(e.to_string()))?;
+    let _ = stream.shutdown().await;
+    Ok(())
+}
+
 async fn handle_connection(
     mut stream: TcpStream,
     web_dir: Option<PathBuf>,
@@ -584,6 +726,7 @@ async fn handle_connection(
     let mut delim_len = 0;
 
     let mut temp_chunk = [0u8; BUFFER_CAPACITY_BYTES];
+    let max_header_bytes = BUFFER_CHUNK_SIZE;
     loop {
         let n = stream
             .read(&mut temp_chunk)
@@ -606,6 +749,10 @@ async fn handle_connection(
             header_end_idx = Some(pos);
             delim_len = LF_LF_LEN;
             break;
+        }
+        if header_buf.len() > max_header_bytes {
+            send_json_response(&mut stream, HTTP_STATUS_BAD_REQUEST, JSON_ERROR_BAD_REQUEST, "POST").await?;
+            return Ok(());
         }
     }
 
@@ -653,158 +800,101 @@ async fn handle_connection(
     let parts: Vec<&str> = first_line.split_whitespace().collect();
 
     if parts.len() < MIN_HTTP_REQUEST_LINE_PARTS {
-        let resp = build_http_response(HTTP_STATUS_BAD_REQUEST, JSON_ERROR_BAD_REQUEST);
-        let _ = stream.write_all(resp.as_bytes()).await;
+        send_json_response(&mut stream, HTTP_STATUS_BAD_REQUEST, JSON_ERROR_BAD_REQUEST, "GET").await?;
         return Ok(());
     }
 
     let method = parts[0];
     let raw_path = parts[1];
-    let path = raw_path.split('?').next().unwrap_or(raw_path);
-    let normalized_path = path.strip_suffix('/').unwrap_or(path);
 
-    if method == "OPTIONS" {
-        let cors_resp = format!(
-            "{}\r\n{}\r\n{}\r\n{}\r\nContent-Length: 0\r\n{}\r\n\r\n",
-            STATUS_LINE_OK,
-            HEADER_CORS_ORIGIN,
-            HEADER_CORS_METHODS,
-            HEADER_CORS_HEADERS,
-            HEADER_CONNECTION_CLOSE
-        );
-        let _ = stream.write_all(cors_resp.as_bytes()).await;
-        let _ = stream.flush().await;
-        let _ = stream.shutdown().await;
-        return Ok(());
-    }
-
-    if method == "POST"
-        && (path == ROUTE_AUTH_VERIFY
-            || path == ROUTE_LICENSE_VERIFY
-            || normalized_path == ROUTE_AUTH_VERIFY
-            || normalized_path == ROUTE_LICENSE_VERIFY)
-    {
-        let resp_str = handle_verify(&body_str).await;
-        let _ = stream.write_all(resp_str.as_bytes()).await;
-        let _ = stream.flush().await;
-        let _ = stream.shutdown().await;
-        return Ok(());
-    }
-
-    if (method == "GET" || method == "HEAD")
-        && (path == ROUTE_HEALTH
-            || path == ROUTE_API_HEALTH
-            || normalized_path == ROUTE_HEALTH
-            || normalized_path == ROUTE_API_HEALTH)
-    {
-        let resp = format!(
-            "{}\r\n{}\r\n{}\r\n{}\r\nContent-Type: {}\r\nContent-Length: {}\r\n{}\r\n\r\n",
-            STATUS_LINE_OK,
-            HEADER_CORS_ORIGIN,
-            HEADER_CORS_METHODS,
-            HEADER_CORS_HEADERS,
-            MIME_JSON,
-            JSON_HEALTH_PAYLOAD.len(),
-            HEADER_CONNECTION_CLOSE
-        );
-        let _ = stream.write_all(resp.as_bytes()).await;
-        if method == "GET" {
-            let _ = stream.write_all(JSON_HEALTH_PAYLOAD.as_bytes()).await;
+    let route = dispatch_route(method, raw_path);
+    match route {
+        HttpRoute::Options => {
+            send_cors_options(&mut stream).await?;
+            return Ok(());
         }
-        let _ = stream.flush().await;
-        let _ = stream.shutdown().await;
-        return Ok(());
-    }
-
-    if method == "GET" || method == "HEAD" {
-        if let Some((filename, content_type)) = match_binary_route(path) {
-            if let Some(fp) = resolve_binary_artifact(filename, web_dir.as_deref()) {
-                serve_binary_file(&mut stream, &fp, filename, content_type, method).await?;
-                return Ok(());
-            }
+        HttpRoute::Health | HttpRoute::RootHealth => {
+            send_json_response(&mut stream, HTTP_STATUS_OK, JSON_HEALTH_PAYLOAD, method).await?;
+            return Ok(());
         }
-        if let Some(relative_dl) = path.strip_prefix("/downloads/") {
-            if !relative_dl.is_empty() && !relative_dl.contains("..") {
-                let content_type = get_mime_type(relative_dl);
-                if let Some(fp) = resolve_binary_artifact(relative_dl, web_dir.as_deref()) {
-                    serve_binary_file(&mut stream, &fp, relative_dl, content_type, method).await?;
-                    return Ok(());
-                }
-            }
+        HttpRoute::AuthVerify => {
+            let resp_str = handle_verify(&body_str).await;
+            send_raw_response(&mut stream, resp_str.as_bytes()).await?;
+            return Ok(());
         }
-
-        if let Some(ref dir) = web_dir {
-            let clean_path = path.trim_start_matches('/');
-            if clean_path.contains("..") {
-                let resp = build_http_response(HTTP_STATUS_NOT_FOUND, JSON_ERROR_NOT_FOUND);
-                let _ = stream.write_all(resp.as_bytes()).await;
-                let _ = stream.flush().await;
-                let _ = stream.shutdown().await;
-                return Ok(());
-            }
-
-            let target_file = if clean_path.is_empty() {
-                dir.join("index.html")
+        HttpRoute::LemonSqueezyWebhook => {
+            let sig = extract_header_value(&headers_str, "x-signature").unwrap_or_default();
+            let secret = std::env::var("LEMONSQUEEZY_WEBHOOK_SECRET").unwrap_or_default();
+            let valid = verify_lemonsqueezy_webhook_signature(body_str.as_bytes(), &sig, &secret);
+            let resp_body = if valid {
+                "{\"received\": true}"
             } else {
-                dir.join(clean_path)
+                "{\"received\": false, \"warning\": \"unverified_signature\"}"
             };
-
-            let file_to_serve = if let (Ok(canon_target), Ok(canon_dir)) =
-                (target_file.canonicalize(), dir.canonicalize())
-            {
-                if canon_target.starts_with(&canon_dir) && canon_target.is_file() {
-                    Some(canon_target)
+            send_json_response(&mut stream, HTTP_STATUS_OK, resp_body, method).await?;
+            return Ok(());
+        }
+        HttpRoute::Analytics => {
+            send_json_response(&mut stream, HTTP_STATUS_OK, "{\"analytics\": \"recorded\"}", method).await?;
+            return Ok(());
+        }
+        HttpRoute::BinaryArtifact(filename, content_type) => {
+            if let Some(fp) = resolve_binary_artifact(filename, web_dir.as_deref()) {
+                serve_file_stream(&mut stream, &fp, content_type, method, Some(filename)).await?;
+                return Ok(());
+            }
+        }
+        HttpRoute::DownloadsPath(relative_dl) => {
+            let content_type = get_mime_type(&relative_dl);
+            if let Some(fp) = resolve_binary_artifact(&relative_dl, web_dir.as_deref()) {
+                serve_file_stream(&mut stream, &fp, content_type, method, Some(&relative_dl)).await?;
+                return Ok(());
+            }
+        }
+        HttpRoute::WebDirStatic(clean_path) => {
+            if let Some(ref dir) = web_dir {
+                let target_file = if clean_path.is_empty() {
+                    dir.join("index.html")
                 } else {
-                    None
-                }
-            } else if !clean_path.contains('.') {
-                let index = dir.join("index.html");
-                if let (Ok(canon_index), Ok(canon_dir)) = (index.canonicalize(), dir.canonicalize())
+                    dir.join(&clean_path)
+                };
+
+                let file_to_serve = if let (Ok(canon_target), Ok(canon_dir)) =
+                    (target_file.canonicalize(), dir.canonicalize())
                 {
-                    if canon_index.starts_with(&canon_dir) && canon_index.is_file() {
-                        Some(canon_index)
+                    if canon_target.starts_with(&canon_dir) && canon_target.is_file() {
+                        Some(canon_target)
+                    } else {
+                        None
+                    }
+                } else if !clean_path.contains('.') {
+                    let index = dir.join("index.html");
+                    if let (Ok(canon_index), Ok(canon_dir)) =
+                        (index.canonicalize(), dir.canonicalize())
+                    {
+                        if canon_index.starts_with(&canon_dir) && canon_index.is_file() {
+                            Some(canon_index)
+                        } else {
+                            None
+                        }
                     } else {
                         None
                     }
                 } else {
                     None
+                };
+
+                if let Some(fp) = file_to_serve {
+                    let mime = get_mime_type(&fp.to_string_lossy());
+                    serve_file_stream(&mut stream, &fp, mime, method, None).await?;
+                    return Ok(());
                 }
-            } else {
-                None
-            };
-
-            if let Some(fp) = file_to_serve {
-                let mime = get_mime_type(&fp.to_string_lossy());
-                serve_static_file(&mut stream, &fp, mime, method).await?;
-                return Ok(());
             }
         }
-
-        if path == ROUTE_ROOT {
-            let resp = format!(
-                "{}\r\n{}\r\n{}\r\n{}\r\nContent-Type: {}\r\nContent-Length: {}\r\n{}\r\n\r\n",
-                STATUS_LINE_OK,
-                HEADER_CORS_ORIGIN,
-                HEADER_CORS_METHODS,
-                HEADER_CORS_HEADERS,
-                MIME_JSON,
-                JSON_HEALTH_PAYLOAD.len(),
-                HEADER_CONNECTION_CLOSE
-            );
-            let _ = stream.write_all(resp.as_bytes()).await;
-            if method == "GET" {
-                let _ = stream.write_all(JSON_HEALTH_PAYLOAD.as_bytes()).await;
-            }
-            let _ = stream.flush().await;
-            let _ = stream.shutdown().await;
-            return Ok(());
-        }
+        HttpRoute::NotFound => {}
     }
 
-    let resp = build_http_response(HTTP_STATUS_NOT_FOUND, JSON_ERROR_NOT_FOUND);
-    let _ = stream.write_all(resp.as_bytes()).await;
-    let _ = stream.flush().await;
-    let _ = stream.shutdown().await;
+    send_json_response(&mut stream, HTTP_STATUS_NOT_FOUND, JSON_ERROR_NOT_FOUND, method).await?;
     Ok(())
 }
 

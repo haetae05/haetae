@@ -143,43 +143,29 @@ impl AuthClient {
 
         let current_machine_id = crate::machine_id::get_hardware_machine_id();
         let secret = crate::crypto::get_license_secret();
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
 
         if let Ok(token) = std::env::var(ENV_HAETAE_LICENSE_TOKEN) {
             if !secret.is_empty() {
                 if let Ok(payload) = crate::crypto::verify_license_token(&token, None, &secret) {
-                    if payload.tier == "PRO" {
+                    if payload.tier == "PRO"
+                        && (payload.machine_id == current_machine_id
+                            || payload.machine_id.is_empty())
+                    {
                         self.set_cached_tier(LicenseTier::Pro);
                         return LicenseTier::Pro;
                     }
                 }
-            } else if let Ok(payload) = crate::crypto::parse_license_token_payload(&token) {
-                let parts: Vec<&str> = token.split('.').collect();
-                let sig_valid = parts.len() == TOKEN_PARTS_COUNT
-                    && !parts[1].is_empty()
-                    && crate::crypto::hex_decode(parts[1]).is_ok();
-
-                let now = std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .map(|d| d.as_secs())
-                    .unwrap_or(0);
-
-                if payload.tier == "PRO"
-                    && sig_valid
-                    && now < payload.expires_at
-                    && (payload.machine_id == current_machine_id || payload.machine_id.is_empty())
-                {
-                    self.set_cached_tier(LicenseTier::Pro);
-                    return LicenseTier::Pro;
-                }
+            } else if evaluate_offline_grace_period(&token, now, &current_machine_id, now) {
+                self.set_cached_tier(LicenseTier::Pro);
+                return LicenseTier::Pro;
             }
         }
 
         if let Some(stored) = load_stored_license() {
-            let now = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map(|d| d.as_secs())
-                .unwrap_or(0);
-
             let within_grace_period =
                 now.saturating_sub(stored.last_verified_at) <= OFFLINE_GRACE_PERIOD_SECS;
 
@@ -198,21 +184,14 @@ impl AuthClient {
                         return LicenseTier::Pro;
                     }
                 }
-            } else if let Ok(payload) = crate::crypto::parse_license_token_payload(&stored.token) {
-                let parts: Vec<&str> = stored.token.split('.').collect();
-                let sig_valid = parts.len() == TOKEN_PARTS_COUNT
-                    && !parts[1].is_empty()
-                    && crate::crypto::hex_decode(parts[1]).is_ok();
-
-                if payload.tier == "PRO"
-                    && sig_valid
-                    && now < payload.expires_at
-                    && within_grace_period
-                    && (payload.machine_id == current_machine_id || payload.machine_id.is_empty())
-                {
-                    self.set_cached_tier(LicenseTier::Pro);
-                    return LicenseTier::Pro;
-                }
+            } else if evaluate_offline_grace_period(
+                &stored.token,
+                stored.last_verified_at,
+                &current_machine_id,
+                now,
+            ) {
+                self.set_cached_tier(LicenseTier::Pro);
+                return LicenseTier::Pro;
             }
         }
 
@@ -278,3 +257,41 @@ impl AuthClient {
         self.verify_license(license_key, &machine_id).await
     }
 }
+
+pub fn evaluate_offline_grace_period(
+    token: &str,
+    last_verified_at: u64,
+    current_machine_id: &str,
+    now: u64,
+) -> bool {
+    let Ok(payload) = crate::crypto::parse_license_token_payload(token) else {
+        return false;
+    };
+
+    if payload.tier != "PRO" {
+        return false;
+    }
+
+    let parts: Vec<&str> = token.split('.').collect();
+    let sig_valid = parts.len() == TOKEN_PARTS_COUNT
+        && !parts[1].is_empty()
+        && crate::crypto::hex_decode(parts[1]).is_ok();
+    if !sig_valid {
+        return false;
+    }
+
+    if now >= payload.expires_at {
+        return false;
+    }
+
+    if now.saturating_sub(last_verified_at) > OFFLINE_GRACE_PERIOD_SECS {
+        return false;
+    }
+
+    if payload.machine_id != current_machine_id && !payload.machine_id.is_empty() {
+        return false;
+    }
+
+    true
+}
+
