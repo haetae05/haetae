@@ -56,7 +56,7 @@ pub fn get_syntax_sample(lang: TargetLanguage, prim: Primitive) -> &'static str 
             Primitive::ImportInclude => "import { util } from \"./util.js\";",
             Primitive::ExportPublic => "export function execute() {}",
             Primitive::Decorator => "@log class Service {}",
-            Primitive::MacroCodeGen => "eval(\"1 + 1\");",
+            Primitive::MacroCodeGen => "eval(\"x = 1;\");",
         },
         TargetLanguage::TypeScript => match prim {
             Primitive::VarDecl => "let x: number = 0;",
@@ -112,7 +112,7 @@ pub fn get_syntax_sample(lang: TargetLanguage, prim: Primitive) -> &'static str 
             Primitive::ImportInclude => "import { Component } from \"./component\";",
             Primitive::ExportPublic => "export function execute(): void {}",
             Primitive::Decorator => "@Injectable() class Service {}",
-            Primitive::MacroCodeGen => "eval(\"1 + 1\");",
+            Primitive::MacroCodeGen => "eval(\"x = 1;\");",
         },
         TargetLanguage::HtmlCss => match prim {
             Primitive::VarDecl => ":root { --primary-color: #000000; }",
@@ -448,7 +448,7 @@ pub fn get_syntax_sample(lang: TargetLanguage, prim: Primitive) -> &'static str 
             Primitive::ImportInclude => "use App\\Models\\User;",
             Primitive::ExportPublic => "public function execute(): void {}",
             Primitive::Decorator => "#[Route(\"/api\")] class Controller {}",
-            Primitive::MacroCodeGen => "eval(\"return 1 + 1;\");",
+            Primitive::MacroCodeGen => "eval(\"return 1;\");",
         },
         TargetLanguage::Swift => match prim {
             Primitive::VarDecl => "var x: Int = 0",
@@ -840,7 +840,7 @@ pub fn get_syntax_sample(lang: TargetLanguage, prim: Primitive) -> &'static str 
             Primitive::ImportInclude => "source ./util.sh",
             Primitive::ExportPublic => "export -f execute",
             Primitive::Decorator => "#!/usr/bin/env bash",
-            Primitive::MacroCodeGen => "eval \"x=$((1 + 1))\"",
+            Primitive::MacroCodeGen => "eval \"x=1\"",
         },
     }
 }
