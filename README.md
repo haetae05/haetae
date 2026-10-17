@@ -3,7 +3,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/License-BSL%201.1-2563eb.svg" alt="License: BSL 1.1" />
   <img src="https://img.shields.io/badge/Rust-1.78%2B%20(2021%20Edition)-dea584.svg?logo=rust" alt="Rust 1.78+" />
-  <img src="https://img.shields.io/badge/Tests-145%2F145%20Passed-10b981.svg" alt="Tests Passed" />
+  <img src="https://img.shields.io/badge/Compiler-Verified-10b981.svg" alt="Compiler Verified" />
   <img src="https://img.shields.io/badge/In--Memory%20Latency-%3C3.2ms-f59e0b.svg" alt="Latency" />
   <img src="https://img.shields.io/badge/Languages-15%20Supported-8b5cf6.svg" alt="Languages" />
   <img src="https://img.shields.io/badge/Platform-Linux%20%7C%20macOS%20%7C%20Windows-64748b.svg" alt="Platform" />
@@ -38,9 +38,9 @@ Haetae provides unified AST lowering and syntax matrix mapping for 15 industry l
 
 ### 2. 3 Intuitive UI Touchpoints
 The VS Code extension offers three low-friction workflows:
-- **Inline Widget (`Ctrl+I` / `Cmd+I`)**: Instant cursor-anchored code synthesis with zero conversational clutter. Generates verified code directly into the active editor buffer.
+- **Inline Widget (`Ctrl+I` / `Cmd+I` or `Alt+K`)**: Instant cursor-anchored code synthesis with zero conversational clutter. Generates verified code directly into the active editor buffer.
 - **Selection Comment Card (`Alt+C` / `Option+C` or `Ctrl+Shift+R`)**: Native review card for highlighted code selections. Provides side-by-side semantic transformation diffs with single-keystroke Keep (`Enter`) or Undo (`Escape`).
-- **Manual Verify (`Alt+V` / `Option+V`)**: Triggers immediate in-memory compilation, CFI analysis, and 10,000-run micro-fuzzing. Highlights memory safety violations without touching the file system.
+- **Terminal Shell Integration (`haetae inline`, `refactor`, `verify`, `new --spec`)**: Direct CLI commands interacting with active editor buffers, complemented by the Manual Verify action (`Alt+V` / `Option+V`).
 
 ### 3. On-Device Local AI
 - Powered by **Qwen 2.5 Coder 1.5B (abliterated)** running locally via Ollama or direct GGUF engine integration.
@@ -212,9 +212,10 @@ cd haetae
 cargo build --release
 ```
 
-### 3. Run the Test Suite (145 Verification & Stress Tests)
+### 3. Verify Workspace Linters and Compilation
 ```bash
-cargo test --workspace
+cargo check --workspace
+cargo clippy --workspace -- -D warnings
 ```
 
 ### 4. Install the Command-Line Binary
@@ -232,7 +233,7 @@ haetae --help
 # Verify single source file in volatile memory
 haetae verify src/example.c
 
-# Run 12-stage hardware boost benchmark
+# Run hardware boost benchmark
 haetae boost
 
 # Authenticate Pro license key
