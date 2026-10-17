@@ -1,8 +1,8 @@
 use haetae_core::config::{
-    BYTES_PER_MB, L3_CACHE_BOUND_MB, L3_SAFETY_MARGIN_MB, WEIGHT_SLICE_SIZE_MB,
+    BISECTION_DIVISOR, BYTES_PER_MB, L3_CACHE_BOUND_MB, L3_SAFETY_MARGIN_MB, WEIGHT_SLICE_SIZE_MB,
 };
 
-pub const MIN_RING_BUFFER_SLICES: usize = 2;
+pub const MIN_RING_BUFFER_SLICES: usize = BISECTION_DIVISOR;
 
 pub struct WeightRingBuffer {
     pub slice_size_bytes: usize,

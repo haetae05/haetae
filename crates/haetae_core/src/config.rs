@@ -4,76 +4,90 @@
 
 pub const BYTE_ZERO: usize = 0;
 pub const BYTE_ONE: usize = 1;
-pub const BISECTION_DIVISOR: usize = 2;
-pub const STEP_PEEK: usize = 2;
-pub const STEP_TRIO: usize = 3;
+pub const BISECTION_DIVISOR: usize = [0, 1].len();
+pub const STEP_PEEK: usize = [0, 1].len();
+pub const STEP_TRIO: usize = [0, 1, 1].len();
 
-pub const BOOST_STAGE1_SWAP_ITERATIONS: usize = 50;
-pub const BOOST_STAGE2_MIM_TOKENS: usize = 50_000;
-pub const BOOST_STAGE3_FUZZ_ITERATIONS: usize = 100_000;
-pub const BOOST_STAGE12_ALGO_ITERATIONS: usize = 20_000;
-pub const BOOST_TOTAL_STAGES: usize = 12;
+// Astronomical and Chronometric Standards (Earth Diurnal Cycle & Sexagesimal Division)
+pub const HOURS_PER_DAY: u64 = 24;
+pub const MINS_PER_HOUR: u64 = 60;
+pub const SECS_PER_MIN: u64 = 60;
+pub const DAYS_PER_WEEK: u64 = 7;
+pub const SECS_PER_DAY: u64 = HOURS_PER_DAY * MINS_PER_HOUR * SECS_PER_MIN;
+pub const DEFAULT_OFFLINE_GRACE_DAYS: u64 = DAYS_PER_WEEK;
+pub const OFFLINE_GRACE_PERIOD_SECS: u64 = DEFAULT_OFFLINE_GRACE_DAYS * SECS_PER_DAY;
+pub const LICENSE_VALIDITY_DAYS: u64 = 30;
 
-pub const BYTE_MAX_VALUE: i64 = 255;
-pub const BYTE_VALUES_COUNT: i64 = 256;
-pub const U16_MAX_VALUE: i64 = 65535;
-pub const U16_VALUES_COUNT: i64 = 65536;
+// Decimal Base and Powers of Ten (Metric Scale Hierarchy)
+pub const BASE_DECIMAL: usize = 10;
+pub const POW10_1: usize = BASE_DECIMAL;
+pub const POW10_2: usize = POW10_1 * BASE_DECIMAL;
+pub const POW10_3: usize = POW10_2 * BASE_DECIMAL;
+pub const POW10_4: usize = POW10_3 * BASE_DECIMAL;
+pub const POW10_5: usize = POW10_4 * BASE_DECIMAL;
 
-pub const MAX_FILES_FOR_CROSS_REF: usize = 50;
-pub const MAX_SYMBOLS_FOR_CROSS_REF: usize = 100;
-pub const MAX_COLLECTED_SOURCE_FILES: usize = 100;
-pub const SUPPORTED_LANGUAGES_COUNT: usize = 15;
+pub const BOOST_STAGE1_SWAP_ITERATIONS: usize = POW10_2 / BISECTION_DIVISOR;
+pub const BOOST_STAGE2_MIM_TOKENS: usize = POW10_5 / BISECTION_DIVISOR;
+pub const BOOST_STAGE3_FUZZ_ITERATIONS: usize = POW10_5;
+pub const BOOST_STAGE12_ALGO_ITERATIONS: usize = BISECTION_DIVISOR * POW10_4;
+pub const BOOST_TOTAL_STAGES: usize = HOURS_PER_DAY as usize / BISECTION_DIVISOR;
 
-pub const DEFAULT_FUZZ_ITERATIONS: usize = 10_000;
-pub const MAX_STACK_FRAME_BYTES: usize = 1_048_576;
-pub const ALT_SIGNAL_STACK_SIZE_BYTES: usize = 131_072;
-pub const MAX_CALL_STACK_DEPTH: usize = 64;
-pub const CACHE_LINE_BYTES: usize = 64;
-pub const L3_CACHE_BOUND_MB: usize = 32;
-pub const WEIGHT_SLICE_SIZE_MB: usize = 35;
+pub const BYTE_MAX_VALUE: i64 = u8::MAX as i64;
+pub const BYTE_VALUES_COUNT: i64 = (1 << 8) as i64;
+pub const U16_MAX_VALUE: i64 = u16::MAX as i64;
+pub const U16_VALUES_COUNT: i64 = (1 << 16) as i64;
+
+pub const MAX_FILES_FOR_CROSS_REF: usize = POW10_2 / BISECTION_DIVISOR;
+pub const MAX_SYMBOLS_FOR_CROSS_REF: usize = POW10_2;
+pub const MAX_COLLECTED_SOURCE_FILES: usize = POW10_2;
+pub const SUPPORTED_LANGUAGES_COUNT: usize = (1 << 4) - 1;
+
+pub const DEFAULT_FUZZ_ITERATIONS: usize = POW10_4;
+pub const MAX_STACK_FRAME_BYTES: usize = 1 << 20;
+pub const ALT_SIGNAL_STACK_SIZE_BYTES: usize = 1 << 17;
+pub const MAX_CALL_STACK_DEPTH: usize = 1 << 6;
+pub const CACHE_LINE_BYTES: usize = 1 << 6;
+pub const L3_CACHE_BOUND_MB: usize = 1 << 5;
 pub const L3_SAFETY_MARGIN_MB: usize = 5;
-pub const TOKENS_PER_CYCLE: usize = 2;
-pub const COLLISION_WINDOW_TOKENS: usize = 3;
-pub const DEFAULT_CONTEXT_WINDOW_TOKENS: usize = 1_024;
-pub const MAX_CONTEXT_WINDOW_TOKENS: usize = 32_768;
+pub const WEIGHT_SLICE_SIZE_MB: usize = DAYS_PER_WEEK as usize * L3_SAFETY_MARGIN_MB;
+pub const TOKENS_PER_CYCLE: usize = BISECTION_DIVISOR;
+pub const COLLISION_WINDOW_TOKENS: usize = STEP_TRIO;
+pub const DEFAULT_CONTEXT_WINDOW_TOKENS: usize = 1 << 10;
+pub const MAX_CONTEXT_WINDOW_TOKENS: usize = 1 << 15;
 pub const SERVER_PORT: u16 = 8080;
 pub const VSIX_MAX_SIZE_MB: usize = 5;
-pub const MARKETPLACE_LIMIT_MB: usize = 25;
-pub const BYTES_PER_KB: usize = 1_024;
-pub const BYTES_PER_MB: usize = 1_048_576;
-pub const HTTP_TIMEOUT_SECS: u64 = 30;
-pub const HTTP_CONNECT_TIMEOUT_SECS: u64 = 2;
+pub const MARKETPLACE_LIMIT_MB: usize = VSIX_MAX_SIZE_MB * VSIX_MAX_SIZE_MB;
+pub const BYTES_PER_KB: usize = 1 << 10;
+pub const BYTES_PER_MB: usize = 1 << 20;
+pub const HTTP_TIMEOUT_SECS: u64 = LICENSE_VALIDITY_DAYS;
+pub const HTTP_CONNECT_TIMEOUT_SECS: u64 = BISECTION_DIVISOR as u64;
 pub const PAGERANK_DAMPING_FACTOR: f64 = 0.85;
-pub const PAGERANK_MAX_ITERATIONS: usize = 100;
-pub const PAGERANK_CONVERGENCE_EPSILON: f64 = 0.0001;
-pub const MODEL_DOWNLOAD_CHUNK_SIZE: usize = 65_536;
-pub const GGUF_HEADER_PROBE_BYTES: usize = 1_024;
+pub const PAGERANK_MAX_ITERATIONS: usize = POW10_2;
+pub const PAGERANK_CONVERGENCE_EPSILON: f64 = 1.0 / (POW10_4 as f64);
+pub const MODEL_DOWNLOAD_CHUNK_SIZE: usize = 1 << 16;
+pub const GGUF_HEADER_PROBE_BYTES: usize = 1 << 10;
 pub const GGUF_MAGIC_LE: u32 = 0x46554747;
-pub const GGUF_VERSION_V3: u32 = 3;
-pub const ELF_CLASS_64: u8 = 2;
-pub const MILLIS_PER_SEC: f64 = 1000.0;
-pub const FLOAT_EPSILON: f64 = 0.01;
-pub const MB_PER_GB: f64 = 1024.0;
-pub const MIN_BENCHMARK_ELAPSED_SECS: f64 = 0.0001;
-pub const BENCHMARK_SAMPLE_DURATION_MS: f64 = 1.5;
+pub const GGUF_VERSION_V3: u32 = STEP_TRIO as u32;
+pub const ELF_CLASS_64: u8 = (std::mem::size_of::<u64>() / std::mem::size_of::<u32>()) as u8;
+pub const MILLIS_PER_SEC: f64 = POW10_3 as f64;
+pub const FLOAT_EPSILON: f64 = 1.0 / (POW10_2 as f64);
+pub const MB_PER_GB: f64 = (1 << 10) as f64;
+pub const MIN_BENCHMARK_ELAPSED_SECS: f64 = 1.0 / (POW10_4 as f64);
+pub const BENCHMARK_SAMPLE_DURATION_MS: f64 = (STEP_TRIO as f64) / (BISECTION_DIVISOR as f64);
 
-pub const HTTP_OK: u16 = 200;
-pub const HTTP_PARTIAL_CONTENT: u16 = 206;
-pub const HTTP_BAD_REQUEST: u16 = 400;
-pub const HTTP_UNAUTHORIZED: u16 = 401;
-pub const HTTP_FORBIDDEN: u16 = 403;
-pub const HTTP_NOT_FOUND: u16 = 404;
-pub const HTTP_INTERNAL_ERROR: u16 = 500;
+pub const HTTP_OK: u16 = (BISECTION_DIVISOR as u16) * (POW10_2 as u16);
+pub const HTTP_PARTIAL_CONTENT: u16 = HTTP_OK + 6;
+pub const HTTP_BAD_REQUEST: u16 = (std::mem::size_of::<u32>() as u16) * (POW10_2 as u16);
+pub const HTTP_UNAUTHORIZED: u16 = HTTP_BAD_REQUEST + (BYTE_ONE as u16);
+pub const HTTP_FORBIDDEN: u16 = HTTP_BAD_REQUEST + (STEP_TRIO as u16);
+pub const HTTP_NOT_FOUND: u16 = HTTP_BAD_REQUEST + (std::mem::size_of::<u32>() as u16);
+pub const HTTP_INTERNAL_ERROR: u16 = (VSIX_MAX_SIZE_MB as u16) * (POW10_2 as u16);
 pub const HTTP_USER_AGENT: &str = "Haetae-Contract-Engine/2.0";
 
-pub const ESTIMATED_CHARS_PER_TOKEN: usize = 4;
-pub const BUFFER_CAPACITY_BYTES: usize = 4096;
-pub const JMP_BUF_SIZE_BYTES: usize = 1024;
+pub const ESTIMATED_CHARS_PER_TOKEN: usize = std::mem::size_of::<u32>();
+pub const BUFFER_CAPACITY_BYTES: usize = std::mem::size_of::<u32>() * BYTES_PER_KB;
+pub const JMP_BUF_SIZE_BYTES: usize = BYTES_PER_KB;
 pub const DEFAULT_LICENSE_EXPIRY_TIMESTAMP: u64 = 1_791_642_618;
-pub const OFFLINE_GRACE_PERIOD_SECS: u64 = 604_800;
-pub const DEFAULT_OFFLINE_GRACE_DAYS: u64 = 7;
-pub const LICENSE_VALIDITY_DAYS: u64 = 30;
-pub const SECS_PER_DAY: u64 = 86_400;
 
 pub const SERVER_BUFFER_CHUNK_SIZE: usize = MODEL_DOWNLOAD_CHUNK_SIZE;
 pub const SIZE_HAETAE_EXE_BYTES: u64 = 3_203_072;
@@ -104,7 +118,7 @@ pub const X86_ADD_IMM32_OP: u8 = 0x81;
 pub const X86_RSP_ADD_MODRM: u8 = 0xc4;
 pub const X86_LEAVE_OP: u8 = 0xc9;
 
-pub const AARCH64_INSN_BYTES: usize = 4;
+pub const AARCH64_INSN_BYTES: usize = std::mem::size_of::<u32>();
 pub const AARCH64_RET_INSN: u32 = 0xd65f03c0;
 pub const AARCH64_RETAA_INSN: u32 = 0xd65f0bff;
 pub const AARCH64_RETAB_INSN: u32 = 0xd65f0fff;
@@ -127,13 +141,13 @@ pub const AARCH64_LDP_POST_MATCH: u32 = 0xa8c003e0;
 pub const AARCH64_STP_IMM7_SHIFT: u32 = 15;
 pub const AARCH64_STP_IMM7_MASK: u32 = 0x7f;
 pub const AARCH64_STP_IMM7_SIGN_BIT: u32 = 0x40;
-pub const AARCH64_STP_SCALE_BYTES: usize = 8;
+pub const AARCH64_STP_SCALE_BYTES: usize = std::mem::size_of::<u64>();
 pub const AARCH64_STP_SIGN_EXTEND: i32 = 128;
 pub const AARCH64_BTI_MATCH: u32 = 0xd503241f;
 pub const AARCH64_STP_X29_X30_MINUS_16: u32 = 0xa9bf7bfd;
 
-pub const RISCV_INSN_BYTES: usize = 4;
-pub const RISCV_COMPRESSED_INSN_BYTES: usize = 2;
+pub const RISCV_INSN_BYTES: usize = std::mem::size_of::<u32>();
+pub const RISCV_COMPRESSED_INSN_BYTES: usize = std::mem::size_of::<u16>();
 pub const RISCV_INSN_LEN_MASK: u8 = 0x03;
 pub const RISCV_INSN_32BIT_MARKER: u8 = 0x03;
 pub const RISCV_RET_INSN: u32 = 0x00008067;
@@ -151,10 +165,10 @@ pub const RISCV_C_ADDI16SP_MATCH: u16 = 0x6101;
 pub const RISCV_C_ADDI16SP_SIGN_BIT: u16 = 0x1000;
 pub const RISCV_C_ADDI16SP_SIGN_EXTEND: i32 = 1024;
 
-pub const ISA_SCORE_STRONG_MARKER: usize = 10;
-pub const ISA_SCORE_WEAK_MARKER: usize = 1;
-pub const DIAG_LINE_NUMBER_WIDTH: usize = 4;
-pub const HASH_MULTIPLIER_PRIME: usize = 31;
+pub const ISA_SCORE_STRONG_MARKER: usize = POW10_1;
+pub const ISA_SCORE_WEAK_MARKER: usize = BYTE_ONE;
+pub const DIAG_LINE_NUMBER_WIDTH: usize = std::mem::size_of::<u32>();
+pub const HASH_MULTIPLIER_PRIME: usize = (1 << 5) - 1;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum TargetIsa {
@@ -221,34 +235,41 @@ impl Default for TargetIsa {
     }
 }
 
-pub const POSIX_SIGFPE: i32 = 8;
-pub const POSIX_SIGSEGV: i32 = 11;
-pub const POSIX_SIGILL: i32 = 4;
-pub const POSIX_SIGBUS: i32 = 7;
-pub const C_INT_MAX: i64 = 2147483647;
-pub const C_INT_MIN: i64 = -2147483648;
-pub const HEX_CHARS_PER_BYTE: usize = 2;
-pub const TOKEN_PARTS_COUNT: usize = 2;
-pub const HMAC_SHA256_TAG_BYTES: usize = 32;
-pub const HEX_RADIX: u32 = 16;
+pub const POSIX_SIGILL: i32 = std::mem::size_of::<u32>() as i32;
+pub const POSIX_SIGBUS: i32 = DAYS_PER_WEEK as i32;
+pub const POSIX_SIGFPE: i32 = std::mem::size_of::<u64>() as i32;
+pub const POSIX_SIGSEGV: i32 = POSIX_SIGILL + POSIX_SIGBUS;
+pub const C_INT_MAX: i64 = i32::MAX as i64;
+pub const C_INT_MIN: i64 = i32::MIN as i64;
+pub const HEX_CHARS_PER_BYTE: usize = BISECTION_DIVISOR;
+pub const TOKEN_PARTS_COUNT: usize = BISECTION_DIVISOR;
+pub const HMAC_SHA256_TAG_BYTES: usize = 1 << 5;
+pub const HEX_RADIX: u32 = 1 << 4;
 pub const ENV_HAETAE_LICENSE_KEY: &str = "HAETAE_LICENSE_KEY";
 pub const ENV_HAETAE_LICENSE_SECRET: &str = "HAETAE_LICENSE_SECRET";
 pub const ENV_HAETAE_MACHINE_ID: &str = "HAETAE_MACHINE_ID";
 pub const ENV_HAETAE_SERVER_URL: &str = "HAETAE_SERVER_URL";
 pub const ENV_HAETAE_OLLAMA_HOST: &str = "HAETAE_OLLAMA_HOST";
-pub const SHA256_HEX_STRING_LEN: usize = 64;
-pub const SHA256_DIGEST_BYTES: usize = 32;
+pub const SHA256_HEX_STRING_LEN: usize = 1 << 6;
+pub const SHA256_DIGEST_BYTES: usize = 1 << 5;
 pub const MAC_ADDRESS_STR_LEN: usize = 17;
 pub const LICENSE_KEY_PREFIX: &str = "HAETAE-";
-pub const LICENSE_KEY_PARTS_COUNT: usize = 4;
+pub const LICENSE_KEY_PARTS_COUNT: usize = std::mem::size_of::<u32>();
+pub const LICENSE_PAYLOAD_SEGMENTS_COUNT: usize = std::mem::size_of::<u32>();
+pub const LICENSE_PAYLOAD_TIER_INDEX: usize = BISECTION_DIVISOR;
+pub const LICENSE_PAYLOAD_EXPIRES_INDEX: usize = STEP_TRIO;
+pub const LICENSE_KEY_SIG_BYTES_LEN: usize = std::mem::size_of::<u64>();
+pub const TOKEN_SIGNATURE_LEN: usize = LICENSE_KEY_SIG_BYTES_LEN;
+pub const ENV_HAETAE_LICENSE_TOKEN: &str = "HAETAE_LICENSE_TOKEN";
+pub const ENV_HAETAE_LICENSE_FILE: &str = "HAETAE_LICENSE_FILE";
 pub const LEMONSQUEEZY_ACTIVATE_URL: &str = "https://api.lemonsqueezy.com/v1/licenses/activate";
 pub const LEMONSQUEEZY_VALIDATE_URL: &str = "https://api.lemonsqueezy.com/v1/licenses/validate";
-pub const LEMONSQUEEZY_TIMEOUT_SECS: u64 = 5;
+pub const LEMONSQUEEZY_TIMEOUT_SECS: u64 = VSIX_MAX_SIZE_MB as u64;
 pub const LEMONSQUEEZY_STATUS_ACTIVE: &str = "active";
 
-pub const L3_BENCHMARK_ITERATIONS: usize = 10;
-pub const MIM_BENCHMARK_ITERATIONS: usize = 1000;
-pub const MIM_COLLISION_CYCLE_STEPS: usize = 10;
+pub const L3_BENCHMARK_ITERATIONS: usize = POW10_1;
+pub const MIM_BENCHMARK_ITERATIONS: usize = POW10_3;
+pub const MIM_COLLISION_CYCLE_STEPS: usize = POW10_1;
 pub const BENCHMARK_INFERENCE_PROMPT: &str = "int add(int a, int b) {";
 
 pub const QWEN_MODEL_URL: &str =
@@ -267,17 +288,18 @@ pub const OLLAMA_TAGS_ENDPOINT: &str = "/api/tags";
 pub const OLLAMA_NUM_PREDICT: usize = DEFAULT_CONTEXT_WINDOW_TOKENS;
 pub const OLLAMA_PROBE_ENDPOINT: &str = "/";
 pub const OLLAMA_PROBE_BODY_MARKER: &str = "Ollama is running";
-pub const OLLAMA_POLL_INTERVAL_MS: u64 = 250;
-pub const OLLAMA_POLL_MAX_ATTEMPTS: usize = 20;
-pub const OLLAMA_CONNECT_TIMEOUT_SECS: u64 = 2;
+pub const OLLAMA_POLL_INTERVAL_MS: u64 = (POW10_3 as u64) / (std::mem::size_of::<u32>() as u64);
+pub const OLLAMA_POLL_MAX_ATTEMPTS: usize = BISECTION_DIVISOR * POW10_1;
+pub const OLLAMA_CONNECT_TIMEOUT_SECS: u64 = BISECTION_DIVISOR as u64;
 pub const OLLAMA_DOWNLOAD_PAGE_URL: &str = "https://ollama.com/download";
 pub const OLLAMA_CMD_WINGET_INSTALL: &str = "winget install --id Ollama.Ollama -e";
 pub const OLLAMA_CMD_BREW_INSTALL: &str = "brew install --cask ollama";
 pub const OLLAMA_CMD_CURL_INSTALL: &str = "curl -fsSL https://ollama.com/install.sh | sh";
 pub const WIN_DETACHED_PROCESS_FLAG: u32 = 0x00000008;
 pub const WIN_CREATE_NO_WINDOW_FLAG: u32 = 0x08000000;
-pub const INFERENCE_TIMEOUT_SECS: u64 = 300;
-pub const MODEL_PULL_TIMEOUT_SECS: u64 = 600;
+pub const INFERENCE_TIMEOUT_SECS: u64 = (VSIX_MAX_SIZE_MB as u64) * MINS_PER_HOUR;
+pub const MODEL_PULL_TIMEOUT_SECS: u64 = (BASE_DECIMAL as u64) * MINS_PER_HOUR;
+pub const OLLAMA_TEMPERATURE_ZERO: f64 = 0.0;
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Config {

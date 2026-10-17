@@ -30,7 +30,7 @@ pub enum ModelError {
     HttpStatus(u16),
     #[error("Inference error: {0}")]
     Inference(String),
-    #[error("Model unavailable: {0}")]
+    #[error("Model '{0}' is not pulled in Ollama. Pull it with `ollama pull {0}` or run `haetae model setup`.")]
     ModelUnavailable(String),
 }
 

@@ -1,13 +1,10 @@
 use crate::client::{AuthError, LicenseTier};
 use haetae_core::config::{
-    ENV_HAETAE_LICENSE_SECRET, HEX_CHARS_PER_BYTE, HEX_RADIX, LICENSE_KEY_PREFIX, TOKEN_PARTS_COUNT,
+    ENV_HAETAE_LICENSE_SECRET, HEX_CHARS_PER_BYTE, HEX_RADIX, LICENSE_KEY_PREFIX,
+    LICENSE_KEY_SIG_BYTES_LEN, LICENSE_PAYLOAD_EXPIRES_INDEX, LICENSE_PAYLOAD_SEGMENTS_COUNT,
+    LICENSE_PAYLOAD_TIER_INDEX, TOKEN_PARTS_COUNT,
 };
 use ring::hmac::{sign, verify, Key, HMAC_SHA256};
-
-const LICENSE_PAYLOAD_SEGMENTS_COUNT: usize = 4;
-const LICENSE_PAYLOAD_TIER_INDEX: usize = 2;
-const LICENSE_PAYLOAD_EXPIRES_INDEX: usize = 3;
-const LICENSE_KEY_SIG_BYTES_LEN: usize = 8;
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct LicenseTokenPayload {

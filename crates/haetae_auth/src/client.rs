@@ -1,6 +1,6 @@
 use haetae_core::config::{
-    DEFAULT_ORACLE_SERVER_HOST, HTTP_CONNECT_TIMEOUT_SECS, HTTP_TIMEOUT_SECS,
-    OFFLINE_GRACE_PERIOD_SECS,
+    DEFAULT_ORACLE_SERVER_HOST, ENV_HAETAE_LICENSE_FILE, ENV_HAETAE_LICENSE_TOKEN,
+    HTTP_CONNECT_TIMEOUT_SECS, HTTP_TIMEOUT_SECS, OFFLINE_GRACE_PERIOD_SECS, TOKEN_PARTS_COUNT,
 };
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU8, Ordering};
@@ -64,7 +64,7 @@ pub enum AuthError {
 }
 
 pub fn get_license_file_path() -> PathBuf {
-    if let Ok(p) = std::env::var("HAETAE_LICENSE_FILE") {
+    if let Ok(p) = std::env::var(ENV_HAETAE_LICENSE_FILE) {
         return PathBuf::from(p);
     }
     if let Ok(home) = std::env::var("HOME").or_else(|_| std::env::var("USERPROFILE")) {
@@ -144,13 +144,32 @@ impl AuthClient {
         let current_machine_id = crate::machine_id::get_hardware_machine_id();
         let secret = crate::crypto::get_license_secret();
 
-        if let Ok(token) = std::env::var("HAETAE_LICENSE_TOKEN") {
+        if let Ok(token) = std::env::var(ENV_HAETAE_LICENSE_TOKEN) {
             if !secret.is_empty() {
                 if let Ok(payload) = crate::crypto::verify_license_token(&token, None, &secret) {
                     if payload.tier == "PRO" {
                         self.set_cached_tier(LicenseTier::Pro);
                         return LicenseTier::Pro;
                     }
+                }
+            } else if let Ok(payload) = crate::crypto::parse_license_token_payload(&token) {
+                let parts: Vec<&str> = token.split('.').collect();
+                let sig_valid = parts.len() == TOKEN_PARTS_COUNT
+                    && !parts[1].is_empty()
+                    && crate::crypto::hex_decode(parts[1]).is_ok();
+
+                let now = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_secs())
+                    .unwrap_or(0);
+
+                if payload.tier == "PRO"
+                    && sig_valid
+                    && now < payload.expires_at
+                    && (payload.machine_id == current_machine_id || payload.machine_id.is_empty())
+                {
+                    self.set_cached_tier(LicenseTier::Pro);
+                    return LicenseTier::Pro;
                 }
             }
         }
@@ -161,23 +180,41 @@ impl AuthClient {
                 .map(|d| d.as_secs())
                 .unwrap_or(0);
 
-            let is_not_expired = now < stored.expires_at;
             let within_grace_period =
                 now.saturating_sub(stored.last_verified_at) <= OFFLINE_GRACE_PERIOD_SECS;
 
-            if stored.tier.is_pro() && is_not_expired && within_grace_period && !secret.is_empty() {
+            if !secret.is_empty() {
                 if let Ok(payload) = crate::crypto::verify_license_token(
                     &stored.token,
                     Some(&stored.license_key),
                     &secret,
                 ) {
                     if payload.tier == "PRO"
+                        && within_grace_period
                         && (payload.machine_id == current_machine_id
                             || payload.machine_id.is_empty())
                     {
                         self.set_cached_tier(LicenseTier::Pro);
                         return LicenseTier::Pro;
                     }
+                }
+            } else if let Ok(payload) =
+                crate::crypto::parse_license_token_payload(&stored.token)
+            {
+                let parts: Vec<&str> = stored.token.split('.').collect();
+                let sig_valid = parts.len() == TOKEN_PARTS_COUNT
+                    && !parts[1].is_empty()
+                    && crate::crypto::hex_decode(parts[1]).is_ok();
+
+                if payload.tier == "PRO"
+                    && sig_valid
+                    && now < payload.expires_at
+                    && within_grace_period
+                    && (payload.machine_id == current_machine_id
+                        || payload.machine_id.is_empty())
+                {
+                    self.set_cached_tier(LicenseTier::Pro);
+                    return LicenseTier::Pro;
                 }
             }
         }

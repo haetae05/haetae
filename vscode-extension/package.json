@@ -21,6 +21,11 @@
     "onStartupFinished"
   ],
   "main": "./extension.js",
+  "scripts": {
+    "bundle": "powershell -ExecutionPolicy Bypass -File ./build_vsix.ps1",
+    "build": "powershell -ExecutionPolicy Bypass -File ./build_vsix.ps1",
+    "package": "powershell -ExecutionPolicy Bypass -File ./build_vsix.ps1"
+  },
   "contributes": {
     "commands": [
       {
@@ -88,6 +93,12 @@
         "title": "Customize Keybindings (Open keybindings.json)",
         "category": "Haetae",
         "icon": "$(gear)"
+      },
+      {
+        "command": "haetae.newSpec",
+        "title": "Spec-to-Code Synthesis (new --spec)",
+        "category": "Haetae",
+        "icon": "$(file-code)"
       }
     ],
     "keybindings": [
@@ -149,6 +160,29 @@
         "key": "ctrl+alt+o",
         "mac": "cmd+alt+o",
         "when": "editorTextFocus && !findWidgetVisible"
+      },
+      {
+        "command": "haetae.verify",
+        "key": "alt+v",
+        "mac": "alt+v",
+        "when": "terminalFocus"
+      },
+      {
+        "command": "haetae.verify",
+        "key": "ctrl+alt+h",
+        "mac": "cmd+alt+h",
+        "when": "terminalFocus"
+      },
+      {
+        "command": "haetae.inline",
+        "key": "ctrl+i",
+        "mac": "cmd+i",
+        "when": "terminalFocus"
+      },
+      {
+        "command": "haetae.inline",
+        "key": "alt+k",
+        "when": "terminalFocus"
       }
     ],
     "menus": {
@@ -196,6 +230,10 @@
           "command": "haetae.comment",
           "group": "navigation@5",
           "when": "editorHasSelection"
+        },
+        {
+          "command": "haetae.newSpec",
+          "group": "navigation@6"
         }
       ],
       "comments/commentThread/title": [

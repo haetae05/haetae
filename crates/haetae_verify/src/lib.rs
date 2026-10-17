@@ -11,7 +11,7 @@ pub use c_lower::{
     lower_source_to_c_ir,
 };
 pub use diagnostics::DiagnosticReport;
-pub use fuzzer::{FuzzResult, FuzzerEngine};
+pub use fuzzer::{FuzzResult, FuzzerEngine, XorShift64};
 pub use headers::bundle_headers;
 pub use tcc_engine::{CompiledCode, TccEngine, VerifyError};
 pub use zydis_cfi::{

@@ -1,11 +1,12 @@
 use haetae_auth::{AuthClient, LicenseServer};
+#[allow(unused_imports)]
 use haetae_core::config::{
     Config, BENCHMARK_INFERENCE_PROMPT, BISECTION_DIVISOR, BOOST_STAGE1_SWAP_ITERATIONS,
     BOOST_STAGE2_MIM_TOKENS, BOOST_STAGE3_FUZZ_ITERATIONS, BYTES_PER_MB, BYTE_ONE,
     BYTE_VALUES_COUNT, CACHE_LINE_BYTES, COLLISION_WINDOW_TOKENS, DEFAULT_FUZZ_ITERATIONS,
     DEFAULT_LOCAL_SERVER_HOST, ENV_HAETAE_LICENSE_KEY, ENV_HAETAE_OLLAMA_HOST, LOCAL_HOST_IPV4,
     MB_PER_GB, MILLIS_PER_SEC, MIM_COLLISION_CYCLE_STEPS, MIN_BENCHMARK_ELAPSED_SECS, SERVER_PORT,
-    TOKENS_PER_CYCLE, WEIGHT_SLICE_SIZE_MB,
+    TOKENS_PER_CYCLE, WEIGHT_SLICE_SIZE_MB, XORSHIFT_DEFAULT_SEED,
 };
 
 use haetae_core::primitives::{Primitive, TargetLanguage};
@@ -21,7 +22,8 @@ use haetae_verify::c_lower::{
     generate_c_fuzz_harness, generate_multi_c_fuzz_harness, lower_source_to_c_ir,
 };
 use haetae_verify::diagnostics::DiagnosticReport;
-use haetae_verify::fuzzer::FuzzerEngine;
+#[allow(unused_imports)]
+use haetae_verify::fuzzer::{FuzzerEngine, XorShift64};
 use haetae_verify::headers::bundle_headers;
 use haetae_verify::tcc_engine::TccEngine;
 use haetae_verify::zydis_cfi::{verify_cfi_for_isa, verify_stack_frame_bound_for_isa};
@@ -113,7 +115,7 @@ fn print_usage() {
     println!("Haetae: Contract-Driven Silent Coding Companion CLI");
     println!("Usage:");
     println!("  haetae inline \"<prompt>\" [--file <path>] [--prefix <pre>] [--suffix <suf>] [--lang <lang>] [--research]");
-    println!("  haetae refactor \"<prompt>\" [--target <code_or_file>] [--file <path>] [--lang <lang>] [--research]");
+    println!("  haetae refactor \"<prompt>\" [--target <code_or_file>] [--prefix <pre>] [--suffix <suf>] [--file <path>] [--lang <lang>] [--research]");
     println!("  haetae spec <spec.md> [--out <output_path>]");
     println!("  haetae new --spec <spec.md> [--out <output_path>]");
     println!("  haetae boost");
@@ -135,6 +137,58 @@ fn ensure_pro_tier(cmd_name: &str) {
         eprintln!("Activate your license with: haetae auth <license_key>");
         eprintln!("Community tier commands available: verify, research, model, server");
         std::process::exit(1);
+    }
+}
+
+async fn ensure_ollama_ready(client: &InferenceClient) -> Result<(), ()> {
+    let daemon = client.daemon_manager();
+    match daemon.check_status().await {
+        haetae_engine::OllamaStatus::NotInstalled => {
+            eprintln!("Error: Ollama is not installed.");
+            eprintln!(
+                "Install command: {}",
+                haetae_engine::OllamaLocator::get_install_command()
+            );
+            eprintln!(
+                "Official download: {}",
+                haetae_engine::OllamaLocator::get_download_url()
+            );
+            Err(())
+        }
+        haetae_engine::OllamaStatus::Stopped { ref binary_path } => {
+            eprintln!(
+                "Error: Ollama daemon is offline (binary found at {:?}).",
+                binary_path
+            );
+            eprintln!("To start the daemon, run: `haetae model start` or `ollama serve`");
+            Err(())
+        }
+        haetae_engine::OllamaStatus::Running { ref host } => {
+            if !client.is_model_available().await {
+                eprintln!(
+                    "Error: Model '{}' is not installed in Ollama at {}.",
+                    client.model_name(),
+                    host
+                );
+                eprintln!(
+                    "Pull the model with: `ollama pull {}` or run `haetae model setup`",
+                    client.model_name()
+                );
+                Err(())
+            } else {
+                Ok(())
+            }
+        }
+    }
+}
+
+async fn print_ollama_diagnostic(client: &InferenceClient, err: &haetae_engine::ModelError) {
+    if ensure_ollama_ready(client).await.is_ok() {
+        eprintln!(
+            "Error: Ollama inference failed on {}: {}",
+            client.daemon_manager().host(),
+            err
+        );
     }
 }
 
@@ -194,6 +248,22 @@ async fn handle_inline(args: &[String]) {
         (String::new(), String::new())
     };
 
+    let has_both_prefix_suffix = !prefix.is_empty() && !suffix.is_empty();
+    let zipper = if has_both_prefix_suffix {
+        let prefix_tokens: Vec<u32> = prefix.bytes().map(|b| b as u32).collect();
+        let suffix_tokens: Vec<u32> = suffix.bytes().map(|b| b as u32).collect();
+        let z = ZipperDecoder::new(
+            &prefix_tokens,
+            &suffix_tokens,
+            COLLISION_WINDOW_TOKENS,
+        );
+        let _ = z.check_collision();
+        let _ = z.stitch_sequence();
+        Some(z)
+    } else {
+        None
+    };
+
     let cfg = Config::from_env();
     let mut fim = FimPrompt::new(prefix.clone(), suffix.clone())
         .with_contract_constraint(&prompt)
@@ -231,6 +301,24 @@ async fn handle_inline(args: &[String]) {
 
     match gen_res {
         Ok(code) if !code.trim().is_empty() => {
+            if let Some(mut z) = zipper {
+                let code_tokens: Vec<u32> = code.bytes().map(|b| b as u32).collect();
+                for (&tf, &tb) in code_tokens.iter().zip(code_tokens.iter().rev()) {
+                    if z.converged {
+                        break;
+                    }
+                    z.step_token_pair(tf, tb);
+                }
+                if !z.converged {
+                    z.converged = z.check_collision();
+                }
+                let stitched_tokens = z.stitch_sequence();
+                eprintln!(
+                    "[MIM Zipper] Convergence: {}, Stitched tokens: {}",
+                    z.converged,
+                    stitched_tokens.len()
+                );
+            }
             println!("{}", code.trim());
         }
         Ok(_) => {
@@ -238,11 +326,7 @@ async fn handle_inline(args: &[String]) {
             std::process::exit(1);
         }
         Err(e) => {
-            eprintln!(
-                "Error: Ollama daemon is unreachable ({}). Please ensure Ollama is running.",
-                cfg.ollama_host
-            );
-            eprintln!("Details: {}", e);
+            print_ollama_diagnostic(&client, &e).await;
             std::process::exit(1);
         }
     }
@@ -256,6 +340,8 @@ async fn handle_refactor(args: &[String]) {
     let mut file_path = None;
     let mut lang_str = None;
     let mut use_research = false;
+    let mut prefix_arg: Option<String> = None;
+    let mut suffix_arg: Option<String> = None;
 
     let mut iter = args.iter();
     while let Some(arg) = iter.next() {
@@ -264,6 +350,10 @@ async fn handle_refactor(args: &[String]) {
                 target_code = t.clone();
                 has_explicit_target = true;
             }
+        } else if arg == "--prefix" {
+            prefix_arg = iter.next().cloned();
+        } else if arg == "--suffix" {
+            suffix_arg = iter.next().cloned();
         } else if arg == "--file" {
             if let Some(fp) = iter.next() {
                 let fp_str = fp.clone();
@@ -304,6 +394,41 @@ async fn handle_refactor(args: &[String]) {
             }
         }
     }
+
+    let (prefix, suffix) = if prefix_arg.is_some() || suffix_arg.is_some() {
+        (
+            prefix_arg.unwrap_or_default(),
+            suffix_arg.unwrap_or_default(),
+        )
+    } else if !target_code.is_empty() {
+        let lines: Vec<&str> = target_code.lines().collect();
+        let mid = lines.len() / BISECTION_DIVISOR;
+        let pre = lines[0..mid].join("\n");
+        let suf = lines[mid..].join("\n");
+        (pre, suf)
+    } else {
+        (String::new(), String::new())
+    };
+
+    if target_code.is_empty() && (!prefix.is_empty() || !suffix.is_empty()) {
+        target_code = format!("{}\n{}", prefix, suffix);
+    }
+
+    let has_both_prefix_suffix = !prefix.is_empty() && !suffix.is_empty();
+    let zipper = if has_both_prefix_suffix {
+        let prefix_tokens: Vec<u32> = prefix.bytes().map(|b| b as u32).collect();
+        let suffix_tokens: Vec<u32> = suffix.bytes().map(|b| b as u32).collect();
+        let z = ZipperDecoder::new(
+            &prefix_tokens,
+            &suffix_tokens,
+            COLLISION_WINDOW_TOKENS,
+        );
+        let _ = z.check_collision();
+        let _ = z.stitch_sequence();
+        Some(z)
+    } else {
+        None
+    };
 
     let p_lower = prompt.to_lowercase();
     let (src_prim, tgt_prim) = if p_lower.contains("branchless")
@@ -359,6 +484,24 @@ async fn handle_refactor(args: &[String]) {
         .await
     {
         Ok(code) if !code.trim().is_empty() => {
+            if let Some(mut z) = zipper {
+                let code_tokens: Vec<u32> = code.bytes().map(|b| b as u32).collect();
+                for (&tf, &tb) in code_tokens.iter().zip(code_tokens.iter().rev()) {
+                    if z.converged {
+                        break;
+                    }
+                    z.step_token_pair(tf, tb);
+                }
+                if !z.converged {
+                    z.converged = z.check_collision();
+                }
+                let stitched_tokens = z.stitch_sequence();
+                eprintln!(
+                    "[MIM Zipper] Convergence: {}, Stitched tokens: {}",
+                    z.converged,
+                    stitched_tokens.len()
+                );
+            }
             eprintln!("Original Code:\n  {}", target_code.trim());
             println!("{}", code.trim());
         }
@@ -367,11 +510,7 @@ async fn handle_refactor(args: &[String]) {
             std::process::exit(1);
         }
         Err(e) => {
-            eprintln!(
-                "Error: Ollama daemon is unreachable ({}). Please ensure Ollama is running.",
-                cfg.ollama_host
-            );
-            eprintln!("Details: {}", e);
+            print_ollama_diagnostic(&client, &e).await;
             std::process::exit(1);
         }
     }
@@ -427,13 +566,9 @@ async fn handle_spec_internal(cmd_name: &str, args: &[String]) {
         spec_file
     );
 
-    let cfg = Config::from_env();
+    let _cfg = Config::from_env();
     let client = InferenceClient::default_local();
-    if !client.is_model_available().await {
-        eprintln!(
-            "Error: Ollama daemon is unreachable ({}). Please ensure Ollama is running.",
-            cfg.ollama_host
-        );
+    if ensure_ollama_ready(&client).await.is_err() {
         std::process::exit(1);
     }
 
@@ -452,11 +587,7 @@ async fn handle_spec_internal(cmd_name: &str, args: &[String]) {
                 std::process::exit(1);
             }
             Err(e) => {
-                eprintln!(
-                    "Error: Ollama daemon is unreachable ({}). Please ensure Ollama is running.",
-                    cfg.ollama_host
-                );
-                eprintln!("Details: {}", e);
+                print_ollama_diagnostic(&client, &e).await;
                 std::process::exit(1);
             }
         };
@@ -585,53 +716,39 @@ async fn handle_boost() {
 
     let mim_start = std::time::Instant::now();
     let client = InferenceClient::default_local();
-    let mut real_inference_opt = None;
-
-    if (haetae_engine::OllamaLocator::find_binary().is_some()
-        || std::env::var(ENV_HAETAE_OLLAMA_HOST).is_ok())
-        && client.is_model_available().await
-    {
-        let inf_start = std::time::Instant::now();
-        if let Ok(res) = client.generate_fim(BENCHMARK_INFERENCE_PROMPT).await {
-            let dur_sec = inf_start.elapsed().as_secs_f64();
-            let dur_ms = dur_sec * MILLIS_PER_SEC;
-            let token_count = res.split_whitespace().count().max(BYTE_ONE);
-            let pairs = token_count / TOKENS_PER_CYCLE;
-            let tps = (token_count as f64) / dur_sec.max(MIN_BENCHMARK_ELAPSED_SECS);
-            real_inference_opt = Some((pairs.max(BYTE_ONE), dur_ms, tps));
-        }
+    if ensure_ollama_ready(&client).await.is_err() {
+        std::process::exit(1);
     }
 
-    let (evaluated_token_pairs, mim_dur_ms, tokens_per_sec) = if let Some(real) = real_inference_opt {
-        real
-    } else {
-        let vocab_size = BYTE_VALUES_COUNT as usize;
-        let mut fwd_logits = vec![0.0f32; vocab_size];
-        let mut bwd_logits = vec![0.0f32; vocab_size];
-        let mut zipper = ZipperDecoder::new(&[0u32], &[1u32], COLLISION_WINDOW_TOKENS);
-        for step in 0..BOOST_STAGE2_MIM_TOKENS {
-            let target_fwd = step % vocab_size;
-            let target_bwd = if step % MIM_COLLISION_CYCLE_STEPS == 0 {
-                target_fwd
-            } else {
-                (step.wrapping_add(1)) % vocab_size
-            };
-            fwd_logits[target_fwd] = 1.0f32;
-            bwd_logits[target_bwd] = 1.0f32;
-            let _ = zipper.step_dual_tokens(&fwd_logits, &bwd_logits);
-            fwd_logits[target_fwd] = 0.0f32;
-            bwd_logits[target_bwd] = 0.0f32;
-            if zipper.converged {
-                let _stitched = zipper.stitch_sequence();
-                zipper = ZipperDecoder::new(&[0u32], &[1u32], COLLISION_WINDOW_TOKENS);
-            }
+    let inf_start = std::time::Instant::now();
+    let res = match client.generate_fim(BENCHMARK_INFERENCE_PROMPT).await {
+        Ok(r) => r,
+        Err(e) => {
+            print_ollama_diagnostic(&client, &e).await;
+            std::process::exit(1);
         }
-        let dur_sec = mim_start.elapsed().as_secs_f64();
-        let dur_ms = dur_sec * MILLIS_PER_SEC;
-        let total_tokens = BOOST_STAGE2_MIM_TOKENS * TOKENS_PER_CYCLE;
-        let tps = total_tokens as f64 / dur_sec.max(MIN_BENCHMARK_ELAPSED_SECS);
-        (BOOST_STAGE2_MIM_TOKENS, dur_ms, tps)
     };
+    let dur_sec = inf_start.elapsed().as_secs_f64();
+    let code_tokens: Vec<u32> = res.bytes().map(|b| b as u32).collect();
+    let token_count = code_tokens.len().max(BYTE_ONE);
+    let pairs = token_count / TOKENS_PER_CYCLE;
+    let tps = (token_count as f64) / dur_sec.max(MIN_BENCHMARK_ELAPSED_SECS);
+
+    let mut zipper = ZipperDecoder::new(&[0u32], &[1u32], COLLISION_WINDOW_TOKENS);
+    for (&tf, &tb) in code_tokens.iter().zip(code_tokens.iter().rev()) {
+        if zipper.converged {
+            break;
+        }
+        zipper.step_token_pair(tf, tb);
+    }
+    if !zipper.converged {
+        zipper.converged = zipper.check_collision();
+    }
+    let _stitched = zipper.stitch_sequence();
+
+    let evaluated_token_pairs = pairs.max(BYTE_ONE);
+    let mim_dur_ms = mim_start.elapsed().as_secs_f64() * MILLIS_PER_SEC;
+    let tokens_per_sec = tps;
     println!(
         "[Boost 2/4] MIM Dual-Head 2-Token Decoding & Zipper Convergence: {} token pairs in {:.2}ms ({:.1} tokens/sec, 0% collapse)",
         evaluated_token_pairs, mim_dur_ms, tokens_per_sec

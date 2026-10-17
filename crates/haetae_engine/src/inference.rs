@@ -3,6 +3,7 @@ use crate::ollama::OllamaDaemonManager;
 use haetae_core::config::{
     Config, HTTP_CONNECT_TIMEOUT_SECS, HTTP_OK, INFERENCE_TIMEOUT_SECS, MODEL_PULL_TIMEOUT_SECS,
     OLLAMA_GENERATE_ENDPOINT, OLLAMA_NUM_PREDICT, OLLAMA_PULL_ENDPOINT, OLLAMA_TAGS_ENDPOINT,
+    OLLAMA_TEMPERATURE_ZERO,
 };
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
@@ -247,7 +248,7 @@ impl InferenceClient {
             raw: true,
             stream: false,
             options: OllamaOptions {
-                temperature: 0.0,
+                temperature: OLLAMA_TEMPERATURE_ZERO,
                 num_predict: OLLAMA_NUM_PREDICT,
                 stop: stop_tokens,
             },

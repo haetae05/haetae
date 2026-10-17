@@ -731,24 +731,50 @@ __attribute__((visibility("default"))) int haetae_safe_call_multi(const long lon
         let mut temp_paths = vec![c_path.clone(), lib_path.clone()];
 
         // Compile into native object file to extract genuine bytecode
-        let obj_cmd = std::process::Command::new(compiler_path)
+        let obj_output = std::process::Command::new(compiler_path)
             .arg(CLANG_FLAG_COMPILE_ONLY)
             .arg(CLANG_OPT_O0)
             .arg("-o")
             .arg(&obj_path)
             .arg(&c_path)
-            .output();
-
-        let mut bytecode = Vec::new();
-        if let Ok(output) = obj_cmd {
-            if output.status.success() {
-                if let Ok(bytes) = std::fs::read(&obj_path) {
-                    if let Some(sec) = Self::extract_text_section(&bytes) {
-                        bytecode = sec;
-                    }
+            .output()
+            .map_err(|e| {
+                for p in &temp_paths {
+                    let _ = std::fs::remove_file(p);
                 }
-                temp_paths.push(obj_path);
+                VerifyError::CompileError(format!("Failed to invoke C compiler: {}", e))
+            })?;
+
+        if !obj_output.status.success() {
+            let stderr_msg = String::from_utf8_lossy(&obj_output.stderr).to_string();
+            for p in &temp_paths {
+                let _ = std::fs::remove_file(p);
             }
+            return Err(VerifyError::CompileError(stderr_msg));
+        }
+        temp_paths.push(obj_path.clone());
+
+        let bytes = std::fs::read(&obj_path).map_err(|e| {
+            for p in &temp_paths {
+                let _ = std::fs::remove_file(p);
+            }
+            VerifyError::CompileError(format!("Failed to read object file: {}", e))
+        })?;
+
+        let bytecode = Self::extract_text_section(&bytes).ok_or_else(|| {
+            for p in &temp_paths {
+                let _ = std::fs::remove_file(p);
+            }
+            VerifyError::CompileError("Failed to extract .text section from object file".to_string())
+        })?;
+
+        if bytecode.is_empty() {
+            for p in &temp_paths {
+                let _ = std::fs::remove_file(p);
+            }
+            return Err(VerifyError::CompileError(
+                "Extracted .text section is empty".to_string(),
+            ));
         }
 
         // Compile into native shared library
@@ -890,11 +916,7 @@ __attribute__((visibility("default"))) int haetae_safe_call_multi(const long lon
         #[cfg(not(any(target_os = "windows", unix)))]
         let (handle, safe_call_fn, safe_call_multi_fn) = (std::ptr::null_mut(), None, None);
 
-        let relocated_size = if !bytecode.is_empty() {
-            bytecode.len()
-        } else {
-            c_code.len()
-        };
+        let relocated_size = bytecode.len();
 
         Ok(CompiledCode {
             state: std::ptr::null_mut(),
@@ -957,9 +979,6 @@ __attribute__((visibility("default"))) int haetae_safe_call_multi(const long lon
     }
 
     pub fn get_bytecode<'a>(&self, code: &'a CompiledCode) -> &'a [u8] {
-        if !code.bytecode.is_empty() {
-            return &code.bytecode;
-        }
-        &[]
+        &code.bytecode
     }
 }

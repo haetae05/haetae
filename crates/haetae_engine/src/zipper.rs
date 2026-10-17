@@ -1,4 +1,4 @@
-use haetae_core::config::COLLISION_WINDOW_TOKENS;
+use haetae_core::config::{BYTES_PER_MB, COLLISION_WINDOW_TOKENS, L3_CACHE_BOUND_MB};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ZipperDecoder {
@@ -34,6 +34,21 @@ impl ZipperDecoder {
         best_idx as u32
     }
 
+    pub fn step_token_pair(&mut self, token_fwd: u32, token_bwd: u32) -> (u32, u32) {
+        if self.converged {
+            return (0, 0);
+        }
+
+        self.prefix_tokens.push(token_fwd);
+        self.suffix_tokens.insert(0, token_bwd);
+
+        if self.check_collision() {
+            self.converged = true;
+        }
+
+        (token_fwd, token_bwd)
+    }
+
     pub fn step_dual_tokens(
         &mut self,
         logits_forward: &[f32],
@@ -46,14 +61,7 @@ impl ZipperDecoder {
         let token_fwd = Self::argmax(logits_forward);
         let token_bwd = Self::argmax(logits_backward);
 
-        self.prefix_tokens.push(token_fwd);
-        self.suffix_tokens.insert(0, token_bwd);
-
-        if self.check_collision() {
-            self.converged = true;
-        }
-
-        (token_fwd, token_bwd)
+        self.step_token_pair(token_fwd, token_bwd)
     }
 
     pub fn check_collision(&self) -> bool {
@@ -92,6 +100,14 @@ impl ZipperDecoder {
 
         result.extend_from_slice(&self.suffix_tokens[overlap..]);
         result
+    }
+
+    pub fn buffer_size_bytes(&self) -> usize {
+        (self.prefix_tokens.len() + self.suffix_tokens.len()) * std::mem::size_of::<u32>()
+    }
+
+    pub fn is_l3_compliant(&self) -> bool {
+        self.buffer_size_bytes() <= (L3_CACHE_BOUND_MB * BYTES_PER_MB)
     }
 }
 

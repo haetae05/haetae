@@ -21,11 +21,21 @@ module.exports = {
     CLI_MAX_SUFFIX_CHARS: 4096,
     RADIX_BASE_36: 36,
     TEMP_RANDOM_SLICE_START: 2,
+    INLINE_WIDGET_BORDER_RADIUS_PX: 8,
     SECRET_KEY_LICENSE_KEY: 'haetae_license_key',
     SECRET_KEY_LICENSE_TOKEN: 'haetae_license_token',
     ENV_LICENSE_KEY: 'HAETAE_LICENSE_KEY',
     ENV_LICENSE_TOKEN: 'HAETAE_LICENSE_TOKEN',
+    CMD_INLINE: 'haetae.inline',
+    CMD_COMMENT: 'haetae.comment',
+    CMD_VERIFY: 'haetae.verify',
+    CMD_NEW_SPEC: 'haetae.newSpec',
+    CMD_BOOST: 'haetae.boost',
+    CMD_TOGGLE_RESEARCH: 'haetae.toggleResearch',
+    CMD_APPLY_COMMENT: 'haetae.applyComment',
+    CMD_DISCARD_COMMENT: 'haetae.discardComment',
     CMD_SET_LICENSE_KEY: 'haetae.setLicenseKey',
-    CMD_AUTH: 'haetae.auth'
+    CMD_AUTH: 'haetae.auth',
+    CMD_SETUP_OLLAMA: 'haetae.setupOllama',
+    CMD_CUSTOMIZE_SHORTCUTS: 'haetae.customizeShortcuts'
 };
-

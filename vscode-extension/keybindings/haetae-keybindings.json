@@ -69,5 +69,28 @@
     "mac": "cmd+alt+o",
     "command": "haetae.setupOllama",
     "when": "editorTextFocus && !findWidgetVisible"
+  },
+  {
+    "key": "alt+v",
+    "mac": "alt+v",
+    "command": "haetae.verify",
+    "when": "terminalFocus"
+  },
+  {
+    "key": "ctrl+alt+h",
+    "mac": "cmd+alt+h",
+    "command": "haetae.verify",
+    "when": "terminalFocus"
+  },
+  {
+    "key": "ctrl+i",
+    "mac": "cmd+i",
+    "command": "haetae.inline",
+    "when": "terminalFocus"
+  },
+  {
+    "key": "alt+k",
+    "command": "haetae.inline",
+    "when": "terminalFocus"
   }
 ]

@@ -86,6 +86,22 @@ pub const X86_OPCODE_XCHG_RM_R_MAX: u8 = 0x87;
 pub const X86_OPCODE_MOV_BYTE_RM_R_MIN: u8 = 0x88;
 pub const X86_OPCODE_MOV_BYTE_RM_R_MAX: u8 = 0x8b;
 
+pub const X86_OPCODE_SYSCALL: u8 = 0x05;
+pub const X86_OPCODE_SYSENTER: u8 = 0x34;
+pub const X86_OPCODE_INT_N: u8 = 0xcd;
+pub const X86_INT_VECTOR_COMPAT_LINUX: u8 = 0x80;
+pub const X86_OPCODE_IN_AL_IMM8: u8 = 0xe4;
+pub const X86_OPCODE_IN_EAX_IMM8: u8 = 0xe5;
+pub const X86_OPCODE_IN_AL_DX: u8 = 0xec;
+pub const X86_OPCODE_IN_EAX_DX: u8 = 0xed;
+pub const X86_OPCODE_OUT_IMM8_AL: u8 = 0xe6;
+pub const X86_OPCODE_OUT_IMM8_EAX: u8 = 0xe7;
+pub const X86_OPCODE_OUT_DX_AL: u8 = 0xee;
+pub const X86_OPCODE_OUT_DX_EAX: u8 = 0xef;
+pub const X86_OPCODE_CLI: u8 = 0xfa;
+pub const X86_OPCODE_STI: u8 = 0xfb;
+pub const X86_OPCODE_HLT: u8 = 0xf4;
+
 pub const AARCH64_TBZ_TBNZ_MASK: u32 = 0x7e000000;
 pub const AARCH64_TBZ_MATCH: u32 = 0x36000000;
 pub const AARCH64_TBNZ_MATCH: u32 = 0x37000000;
@@ -212,9 +228,46 @@ pub struct X86Instruction {
     pub is_stack_add: bool,
     pub is_leave: bool,
     pub jump_target: Option<usize>,
+    pub is_banned: bool,
 }
 
 impl X86_64Verifier {
+    pub fn scan_banned_instructions(bytecode: &[u8]) -> Result<(), VerifyError> {
+        let mut idx = 0;
+        while idx < bytecode.len() {
+            let b = bytecode[idx];
+            if idx + 1 < bytecode.len() {
+                let next = bytecode[idx + 1];
+                if (b == X86_OPCODE_TWO_BYTE_ESCAPE && (next == X86_OPCODE_SYSCALL || next == X86_OPCODE_SYSENTER))
+                    || (b == X86_OPCODE_INT_N && next == X86_INT_VECTOR_COMPAT_LINUX)
+                {
+                    return Err(VerifyError::CfiViolation(
+                        "Banned system/privileged instruction detected".to_string(),
+                    ));
+                }
+            }
+            if b == X86_OPCODE_INT3
+                || b == X86_OPCODE_IN_AL_IMM8
+                || b == X86_OPCODE_IN_EAX_IMM8
+                || b == X86_OPCODE_IN_AL_DX
+                || b == X86_OPCODE_IN_EAX_DX
+                || b == X86_OPCODE_OUT_IMM8_AL
+                || b == X86_OPCODE_OUT_IMM8_EAX
+                || b == X86_OPCODE_OUT_DX_AL
+                || b == X86_OPCODE_OUT_DX_EAX
+                || b == X86_OPCODE_CLI
+                || b == X86_OPCODE_STI
+                || b == X86_OPCODE_HLT
+            {
+                return Err(VerifyError::CfiViolation(
+                    "Banned system/privileged instruction detected".to_string(),
+                ));
+            }
+            idx += 1;
+        }
+        Ok(())
+    }
+
     pub fn decode_instruction(bytecode: &[u8], start: usize) -> Option<X86Instruction> {
         if start >= bytecode.len() {
             return None;
@@ -270,6 +323,7 @@ impl X86_64Verifier {
                 is_stack_add: false,
                 is_leave: false,
                 jump_target: None,
+                is_banned: false,
             });
         }
 
@@ -291,6 +345,7 @@ impl X86_64Verifier {
                     is_stack_add: false,
                     is_leave: false,
                     jump_target: None,
+                    is_banned: false,
                 });
             }
         }
@@ -305,6 +360,7 @@ impl X86_64Verifier {
         let mut is_add = false;
         let mut is_leave = false;
         let mut jump_target = None;
+        let mut is_banned = false;
 
         if !is_two_byte {
             // One-byte opcodes
@@ -325,9 +381,53 @@ impl X86_64Verifier {
                 X86_LEAVE_OP => {
                     is_leave = true;
                 }
-                X86_NOP_OPCODE | X86_OPCODE_INT3 => {}
-                b if (X86_OPCODE_PUSH_REG_MIN..=X86_OPCODE_PUSH_REG_MAX).contains(&b) => {}
-                b if (X86_OPCODE_POP_REG_MIN..=X86_OPCODE_POP_REG_MAX).contains(&b) => {}
+                X86_NOP_OPCODE => {}
+                X86_OPCODE_INT_N => {
+                    if pos < bytecode.len() && bytecode[pos] == X86_INT_VECTOR_COMPAT_LINUX {
+                        is_banned = true;
+                        pos += 1;
+                    }
+                }
+                X86_OPCODE_INT3
+                | X86_OPCODE_IN_AL_IMM8
+                | X86_OPCODE_IN_EAX_IMM8
+                | X86_OPCODE_IN_AL_DX
+                | X86_OPCODE_IN_EAX_DX
+                | X86_OPCODE_OUT_IMM8_AL
+                | X86_OPCODE_OUT_IMM8_EAX
+                | X86_OPCODE_OUT_DX_AL
+                | X86_OPCODE_OUT_DX_EAX
+                | X86_OPCODE_CLI
+                | X86_OPCODE_STI
+                | X86_OPCODE_HLT => {
+                    is_banned = true;
+                    if (op == X86_OPCODE_IN_AL_IMM8
+                        || op == X86_OPCODE_IN_EAX_IMM8
+                        || op == X86_OPCODE_OUT_IMM8_AL
+                        || op == X86_OPCODE_OUT_IMM8_EAX)
+                        && pos < bytecode.len()
+                    {
+                        pos += 1;
+                    }
+                }
+                b if (X86_OPCODE_PUSH_REG_MIN..=X86_OPCODE_PUSH_REG_MAX).contains(&b) => {
+                    is_sub = true;
+                    let slot_size = if has_op_size {
+                        std::mem::size_of::<u16>() as i64
+                    } else {
+                        std::mem::size_of::<u64>() as i64
+                    };
+                    imm_val = Some(slot_size);
+                }
+                b if (X86_OPCODE_POP_REG_MIN..=X86_OPCODE_POP_REG_MAX).contains(&b) => {
+                    is_add = true;
+                    let slot_size = if has_op_size {
+                        std::mem::size_of::<u16>() as i64
+                    } else {
+                        std::mem::size_of::<u64>() as i64
+                    };
+                    imm_val = Some(slot_size);
+                }
                 X86_ENTER_OP => {
                     if pos + X86_ENTER_OPERANDS_BYTES <= bytecode.len() {
                         let imm = u16::from_le_bytes(
@@ -513,6 +613,9 @@ impl X86_64Verifier {
         } else {
             // Two-byte opcodes (0x0F ...)
             match op {
+                X86_OPCODE_SYSCALL | X86_OPCODE_SYSENTER => {
+                    is_banned = true;
+                }
                 b if (X86_OPCODE_JCC_REL32_BASE
                     ..X86_OPCODE_JCC_REL32_BASE + X86_OPCODE_JCC_REL32_COUNT)
                     .contains(&b) =>
@@ -550,6 +653,7 @@ impl X86_64Verifier {
             is_stack_add: is_add,
             is_leave,
             jump_target,
+            is_banned,
         })
     }
 
@@ -576,13 +680,22 @@ impl IsaVerifier for X86_64Verifier {
 
     fn verify_stack_frame(&self, bytecode: &[u8], max_bytes: usize) -> Result<(), VerifyError> {
         if bytecode.is_empty() {
-            return Ok(());
+            return Err(VerifyError::CfiViolation(
+                "Empty bytecode cannot be verified".to_string(),
+            ));
         }
+
+        Self::scan_banned_instructions(bytecode)?;
 
         let instructions = Self::decode_all_instructions(bytecode);
         let mut current_allocated = 0;
 
         for insn in instructions {
+            if insn.is_banned {
+                return Err(VerifyError::CfiViolation(
+                    "Banned system/privileged instruction detected".to_string(),
+                ));
+            }
             if insn.is_return || insn.is_leave {
                 current_allocated = 0;
                 continue;
@@ -607,14 +720,23 @@ impl IsaVerifier for X86_64Verifier {
 
     fn verify_cfi(&self, bytecode: &[u8]) -> Result<(), VerifyError> {
         if bytecode.is_empty() {
-            return Ok(());
+            return Err(VerifyError::CfiViolation(
+                "Empty bytecode cannot be verified".to_string(),
+            ));
         }
+
+        Self::scan_banned_instructions(bytecode)?;
 
         let instructions = Self::decode_all_instructions(bytecode);
         let mut valid_boundaries = HashSet::new();
         let mut has_ret = false;
 
         for insn in &instructions {
+            if insn.is_banned {
+                return Err(VerifyError::CfiViolation(
+                    "Banned system/privileged instruction detected".to_string(),
+                ));
+            }
             valid_boundaries.insert(insn.offset);
             if insn.is_return {
                 has_ret = true;
@@ -662,7 +784,9 @@ impl IsaVerifier for AArch64Verifier {
 
     fn verify_stack_frame(&self, bytecode: &[u8], max_bytes: usize) -> Result<(), VerifyError> {
         if bytecode.is_empty() {
-            return Ok(());
+            return Err(VerifyError::CfiViolation(
+                "Empty bytecode cannot be verified".to_string(),
+            ));
         }
 
         let mut current_allocated = 0;
@@ -726,7 +850,9 @@ impl IsaVerifier for AArch64Verifier {
 
     fn verify_cfi(&self, bytecode: &[u8]) -> Result<(), VerifyError> {
         if bytecode.is_empty() {
-            return Ok(());
+            return Err(VerifyError::CfiViolation(
+                "Empty bytecode cannot be verified".to_string(),
+            ));
         }
 
         if !bytecode.len().is_multiple_of(AARCH64_INSN_BYTES) {
@@ -828,7 +954,9 @@ impl IsaVerifier for RiscV64Verifier {
 
     fn verify_stack_frame(&self, bytecode: &[u8], max_bytes: usize) -> Result<(), VerifyError> {
         if bytecode.is_empty() {
-            return Ok(());
+            return Err(VerifyError::CfiViolation(
+                "Empty bytecode cannot be verified".to_string(),
+            ));
         }
 
         let mut current_allocated = 0;
@@ -897,7 +1025,9 @@ impl IsaVerifier for RiscV64Verifier {
 
     fn verify_cfi(&self, bytecode: &[u8]) -> Result<(), VerifyError> {
         if bytecode.is_empty() {
-            return Ok(());
+            return Err(VerifyError::CfiViolation(
+                "Empty bytecode cannot be verified".to_string(),
+            ));
         }
 
         if !bytecode.len().is_multiple_of(RISCV_COMPRESSED_INSN_BYTES) {
@@ -1198,7 +1328,9 @@ pub fn detect_isa(bytecode: &[u8]) -> Option<TargetIsa> {
 
 pub fn verify_stack_frame_bound(bytecode: &[u8], max_bytes: usize) -> Result<(), VerifyError> {
     if bytecode.is_empty() {
-        return Ok(());
+        return Err(VerifyError::CfiViolation(
+            "Empty bytecode cannot be verified".to_string(),
+        ));
     }
     let isa = detect_isa(bytecode).unwrap_or_else(TargetIsa::native);
     get_verifier(isa).verify_stack_frame(bytecode, max_bytes)
@@ -1206,7 +1338,9 @@ pub fn verify_stack_frame_bound(bytecode: &[u8], max_bytes: usize) -> Result<(),
 
 pub fn verify_cfi_integrity(bytecode: &[u8]) -> Result<(), VerifyError> {
     if bytecode.is_empty() {
-        return Ok(());
+        return Err(VerifyError::CfiViolation(
+            "Empty bytecode cannot be verified".to_string(),
+        ));
     }
     let isa = detect_isa(bytecode).unwrap_or_else(TargetIsa::native);
     get_verifier(isa).verify_cfi(bytecode)

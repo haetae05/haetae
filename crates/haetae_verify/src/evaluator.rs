@@ -418,16 +418,15 @@ impl<'a> ExprParser<'a> {
             }
             Some(Token::Star) => {
                 self.next();
-                let ptr_val = self.parse_unary()?;
-                if ptr_val == 0 {
+                let addr = self.parse_unary()?;
+                if addr == 0 {
                     return Err(VerifyError::CrashSignal(POSIX_SIGSEGV));
                 }
-                let val = self
-                    .env
-                    .get(&format!("ptr_{}", ptr_val))
-                    .copied()
-                    .unwrap_or(ptr_val);
-                Ok(val)
+                if let Some(val) = self.env.get(&format!("ptr_{}", addr)).copied() {
+                    Ok(val)
+                } else {
+                    Err(VerifyError::SymbolNotFound(format!("*0x{:x}", addr)))
+                }
             }
             _ => self.parse_primary(),
         }
@@ -563,12 +562,17 @@ impl<'a> ExprParser<'a> {
                         }
                     }
                     let key = format!("{}[{}]", name, idx);
-                    let val = self.env.get(&key).copied().unwrap_or(0);
-                    return Ok(val);
+                    if let Some(val) = self.env.get(&key).copied() {
+                        return Ok(val);
+                    }
+                    return Err(VerifyError::SymbolNotFound(key));
                 }
 
-                let val = self.env.get(&name).copied().unwrap_or(0);
-                Ok(val)
+                if let Some(val) = self.env.get(&name).copied() {
+                    Ok(val)
+                } else {
+                    Err(VerifyError::SymbolNotFound(name))
+                }
             }
             Some(Token::LParen) => {
                 let is_cast = match self.peek() {
@@ -608,7 +612,6 @@ impl<'a> ExprParser<'a> {
                 for (i, p) in params.iter().enumerate() {
                     let val = if i < args.len() { args[i] } else { 0 };
                     callee_env.insert(p.clone(), val);
-                    callee_env.insert(format!("p{}", i), val);
                 }
                 let res = execute_function_lines(
                     &body,
@@ -621,10 +624,13 @@ impl<'a> ExprParser<'a> {
         }
 
         if fn_name == "abs" {
-            return Ok(args.first().copied().unwrap_or(0).abs());
+            let arg = args.first().copied().ok_or_else(|| {
+                VerifyError::SymbolNotFound("missing argument for abs".to_string())
+            })?;
+            return Ok(arg.abs());
         }
 
-        Ok(0)
+        Err(VerifyError::SymbolNotFound(fn_name.to_string()))
     }
 }
 
@@ -952,34 +958,46 @@ pub fn execute_function_lines(
                 let mut parser = ExprParser::with_context(&expr_toks, env, source, call_depth);
                 let val = parser.parse_expression()?;
                 if let Some(var_name) = left_trim.strip_suffix('+') {
-                    let v = env
+                    let prev = env
                         .get(var_name.trim())
                         .copied()
-                        .unwrap_or(0)
-                        .wrapping_add(val);
+                        .ok_or_else(|| VerifyError::SymbolNotFound(var_name.trim().to_string()))?;
+                    let v = prev.wrapping_add(val);
                     env.insert(var_name.trim().to_string(), v);
                 } else if let Some(var_name) = left_trim.strip_suffix('-') {
-                    let v = env
+                    let prev = env
                         .get(var_name.trim())
                         .copied()
-                        .unwrap_or(0)
-                        .wrapping_sub(val);
+                        .ok_or_else(|| VerifyError::SymbolNotFound(var_name.trim().to_string()))?;
+                    let v = prev.wrapping_sub(val);
                     env.insert(var_name.trim().to_string(), v);
                 } else if let Some(var_name) = left_trim.strip_suffix('*') {
-                    let v = env
+                    let prev = env
                         .get(var_name.trim())
                         .copied()
-                        .unwrap_or(0)
-                        .wrapping_mul(val);
+                        .ok_or_else(|| VerifyError::SymbolNotFound(var_name.trim().to_string()))?;
+                    let v = prev.wrapping_mul(val);
                     env.insert(var_name.trim().to_string(), v);
                 } else if let Some(var_name) = left_trim.strip_suffix('^') {
-                    let v = env.get(var_name.trim()).copied().unwrap_or(0) ^ val;
+                    let prev = env
+                        .get(var_name.trim())
+                        .copied()
+                        .ok_or_else(|| VerifyError::SymbolNotFound(var_name.trim().to_string()))?;
+                    let v = prev ^ val;
                     env.insert(var_name.trim().to_string(), v);
                 } else if let Some(var_name) = left_trim.strip_suffix('&') {
-                    let v = env.get(var_name.trim()).copied().unwrap_or(0) & val;
+                    let prev = env
+                        .get(var_name.trim())
+                        .copied()
+                        .ok_or_else(|| VerifyError::SymbolNotFound(var_name.trim().to_string()))?;
+                    let v = prev & val;
                     env.insert(var_name.trim().to_string(), v);
                 } else if let Some(var_name) = left_trim.strip_suffix('|') {
-                    let v = env.get(var_name.trim()).copied().unwrap_or(0) | val;
+                    let prev = env
+                        .get(var_name.trim())
+                        .copied()
+                        .ok_or_else(|| VerifyError::SymbolNotFound(var_name.trim().to_string()))?;
+                    let v = prev | val;
                     env.insert(var_name.trim().to_string(), v);
                 } else {
                     env.insert(left_trim.to_string(), val);
@@ -1100,13 +1118,12 @@ pub fn evaluate_c_source(source: &str, payload: i64) -> Result<i32, VerifyError>
     };
 
     let mut env = HashMap::new();
-    env.insert("payload".to_string(), p_val);
 
     for (p_idx, p_name) in func_params.iter().enumerate() {
         if p_idx == 0 {
             env.insert(p_name.clone(), p_val);
         } else {
-            let shift = p_idx - 1;
+            let shift = p_idx.saturating_sub(1);
             let v = (p_val >> shift) & 1;
             env.insert(p_name.clone(), v);
         }
@@ -1114,14 +1131,15 @@ pub fn evaluate_c_source(source: &str, payload: i64) -> Result<i32, VerifyError>
 
     populate_top_level_declarations(source, &mut env);
 
-    let lines_to_eval = if target_lines.is_empty() {
-        source
-            .lines()
-            .map(|s| s.to_string())
-            .collect::<Vec<String>>()
-    } else {
-        target_lines
-    };
+    if target_lines.is_empty() {
+        return Err(VerifyError::SymbolNotFound(
+            if !chosen_fn.is_empty() {
+                chosen_fn
+            } else {
+                "haetae_fuzz_entry".to_string()
+            },
+        ));
+    }
 
-    execute_function_lines(&lines_to_eval, &mut env, Some(source), 0)
+    execute_function_lines(&target_lines, &mut env, Some(source), 0)
 }

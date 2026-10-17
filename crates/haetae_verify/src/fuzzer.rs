@@ -382,5 +382,3 @@ impl FuzzerEngine {
         })
     }
 }
-
-pub fn install_signal_handlers() {}

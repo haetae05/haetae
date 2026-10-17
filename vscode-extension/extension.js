@@ -33,12 +33,23 @@ var require_config = __commonJS({
       CLI_MAX_SUFFIX_CHARS: 4096,
       RADIX_BASE_36: 36,
       TEMP_RANDOM_SLICE_START: 2,
+      INLINE_WIDGET_BORDER_RADIUS_PX: 8,
       SECRET_KEY_LICENSE_KEY: "haetae_license_key",
       SECRET_KEY_LICENSE_TOKEN: "haetae_license_token",
       ENV_LICENSE_KEY: "HAETAE_LICENSE_KEY",
       ENV_LICENSE_TOKEN: "HAETAE_LICENSE_TOKEN",
+      CMD_INLINE: "haetae.inline",
+      CMD_COMMENT: "haetae.comment",
+      CMD_VERIFY: "haetae.verify",
+      CMD_NEW_SPEC: "haetae.newSpec",
+      CMD_BOOST: "haetae.boost",
+      CMD_TOGGLE_RESEARCH: "haetae.toggleResearch",
+      CMD_APPLY_COMMENT: "haetae.applyComment",
+      CMD_DISCARD_COMMENT: "haetae.discardComment",
       CMD_SET_LICENSE_KEY: "haetae.setLicenseKey",
-      CMD_AUTH: "haetae.auth"
+      CMD_AUTH: "haetae.auth",
+      CMD_SETUP_OLLAMA: "haetae.setupOllama",
+      CMD_CUSTOMIZE_SHORTCUTS: "haetae.customizeShortcuts"
     };
   }
 });
@@ -325,6 +336,7 @@ var HaetaeComment = class {
   }
 };
 function activate(context) {
+  context.environmentVariableCollection.prepend("PATH", path.join(__dirname, "bin") + path.delimiter);
   extensionSecrets = context.secrets;
   migrateStoredLicense(context.secrets);
   const diagChannel = vscode.window.createOutputChannel("Haetae Diagnostics");
@@ -375,6 +387,14 @@ function activate(context) {
     }
   });
   context.subscriptions.push(ghostDecoration);
+  const inlineWidgetDecoration = vscode.window.createTextEditorDecorationType({
+    isWholeLine: true,
+    borderWidth: "1px",
+    borderStyle: "solid",
+    borderColor: new vscode.ThemeColor("focusBorder"),
+    borderRadius: `${CONFIG.INLINE_WIDGET_BORDER_RADIUS_PX}px`
+  });
+  context.subscriptions.push(inlineWidgetDecoration);
   vscode.window.onDidChangeTextEditorSelection((e) => {
     if (e.textEditor && !e.selections[0].isEmpty) {
       const range = new vscode.Range(e.selections[0].end, e.selections[0].end);
@@ -390,14 +410,14 @@ function activate(context) {
       return [new vscode.Range(0, 0, Math.max(document.lineCount - 1, 0), 0)];
     }
   };
-  const toggleResearchCommand = vscode.commands.registerCommand("haetae.toggleResearch", () => {
+  const toggleResearchCommand = vscode.commands.registerCommand(CONFIG.CMD_TOGGLE_RESEARCH, () => {
     globalResearchEnabled = !globalResearchEnabled;
     updateResearchUI();
     const stateStr = globalResearchEnabled ? "Enabled (s.jina.ai)" : "Disabled";
     vscode.window.showInformationMessage(`Haetae Web Research: ${stateStr}`);
   });
   context.subscriptions.push(toggleResearchCommand);
-  const applyCommentCommand = vscode.commands.registerCommand("haetae.applyComment", async (arg) => {
+  const applyCommentCommand = vscode.commands.registerCommand(CONFIG.CMD_APPLY_COMMENT, async (arg) => {
     const targetThread = arg && arg.haetaeRefactorCode ? arg : arg && arg.parentThread && arg.parentThread.haetaeRefactorCode ? arg.parentThread : activeRefactorThread;
     if (!targetThread || !targetThread.haetaeRefactorCode) {
       vscode.window.showWarningMessage("Haetae: No active refactor proposal to apply.");
@@ -418,7 +438,7 @@ function activate(context) {
     }
   });
   context.subscriptions.push(applyCommentCommand);
-  const discardCommentCommand = vscode.commands.registerCommand("haetae.discardComment", async (arg) => {
+  const discardCommentCommand = vscode.commands.registerCommand(CONFIG.CMD_DISCARD_COMMENT, async (arg) => {
     const targetThread = arg && arg.dispose ? arg : arg && arg.parentThread && arg.parentThread.dispose ? arg.parentThread : activeRefactorThread;
     if (targetThread) {
       targetThread.dispose();
@@ -429,13 +449,24 @@ function activate(context) {
     }
   });
   context.subscriptions.push(discardCommentCommand);
-  const inlineCommand = vscode.commands.registerCommand("haetae.inline", async () => {
+  const inlineCommand = vscode.commands.registerCommand(CONFIG.CMD_INLINE, async () => {
     const editor = vscode.window.activeTextEditor;
     if (!editor) {
       vscode.window.showWarningMessage("Haetae: No active editor found.");
       return;
     }
+    const curLine = editor.selection.active.line;
+    const lineRange = editor.document.lineAt(curLine).range;
+    editor.setDecorations(inlineWidgetDecoration, [lineRange]);
+    const clearInlineDecoration = () => {
+      if (editor) {
+        editor.setDecorations(inlineWidgetDecoration, []);
+      }
+    };
     const inputBox = vscode.window.createInputBox();
+    inputBox.onDidHide(() => {
+      clearInlineDecoration();
+    });
     const refreshInputBox = () => {
       if (globalResearchEnabled) {
         inputBox.title = "Haetae: Inline Code Synthesis (Ctrl+I) [Web Research: ON]";
@@ -536,7 +567,7 @@ function activate(context) {
     inputBox.show();
   });
   context.subscriptions.push(inlineCommand);
-  const commentCommand = vscode.commands.registerCommand("haetae.comment", async () => {
+  const commentCommand = vscode.commands.registerCommand(CONFIG.CMD_COMMENT, async () => {
     const editor = vscode.window.activeTextEditor;
     if (!editor || editor.selection.isEmpty) {
       vscode.window.showWarningMessage("Haetae: Select a code block first to open Comment Refactor Card.");
@@ -628,11 +659,17 @@ function activate(context) {
           const mdBody = new vscode.MarkdownString();
           mdBody.isTrusted = true;
           mdBody.supportHtml = true;
-          mdBody.appendMarkdown(`### Haetae Refactor Proposal
+          mdBody.appendMarkdown(`### Haetae Contract Refactor
 **Instruction**: ${prompt}
 
 `);
+          mdBody.appendMarkdown(`#### Proposed Changes
+`);
           mdBody.appendCodeblock(refactoredCode.trim(), docLang);
+          mdBody.appendMarkdown(`
+#### Original Selection
+`);
+          mdBody.appendCodeblock(selectedText.trim(), docLang);
           mdBody.appendMarkdown(
             `
 
@@ -669,7 +706,7 @@ function activate(context) {
     inputBox.show();
   });
   context.subscriptions.push(commentCommand);
-  const verifyCommand = vscode.commands.registerCommand("haetae.verify", async () => {
+  const verifyCommand = vscode.commands.registerCommand(CONFIG.CMD_VERIFY, async () => {
     const editor = vscode.window.activeTextEditor;
     if (!editor) {
       vscode.window.showWarningMessage("Haetae: No active editor to verify.");
@@ -710,7 +747,7 @@ function activate(context) {
     }
   });
   context.subscriptions.push(verifyCommand);
-  const boostCommand = vscode.commands.registerCommand("haetae.boost", async () => {
+  const boostCommand = vscode.commands.registerCommand(CONFIG.CMD_BOOST, async () => {
     diagChannel.clear();
     diagChannel.appendLine("Running Haetae /boost Engine & Hardware Pipeline Benchmark...");
     diagChannel.show(true);
@@ -778,7 +815,7 @@ function activate(context) {
     await handleSetLicenseKey();
   });
   context.subscriptions.push(authCommand);
-  const setupOllamaCommand = vscode.commands.registerCommand("haetae.setupOllama", async () => {
+  const setupOllamaCommand = vscode.commands.registerCommand(CONFIG.CMD_SETUP_OLLAMA, async () => {
     const reachable = await checkOllamaReachable();
     if (reachable) {
       const statusRes = await runHaetaeCommand(["model", "status"]);
@@ -800,7 +837,7 @@ ${statusRes.stdout.trim()}`);
     }
   });
   context.subscriptions.push(setupOllamaCommand);
-  const customizeShortcutsCommand = vscode.commands.registerCommand("haetae.customizeShortcuts", async () => {
+  const customizeShortcutsCommand = vscode.commands.registerCommand(CONFIG.CMD_CUSTOMIZE_SHORTCUTS, async () => {
     try {
       await vscode.commands.executeCommand("workbench.action.openGlobalKeybindingsFile");
     } catch (err) {
@@ -808,6 +845,52 @@ ${statusRes.stdout.trim()}`);
     }
   });
   context.subscriptions.push(customizeShortcutsCommand);
+  const newSpecCommand = vscode.commands.registerCommand(CONFIG.CMD_NEW_SPEC, async () => {
+    let defaultSpec = "";
+    const editor = vscode.window.activeTextEditor;
+    if (editor && editor.document.fileName.endsWith(".md")) {
+      defaultSpec = editor.document.fileName;
+    }
+    const specInput = await vscode.window.showInputBox({
+      prompt: "Enter markdown contract specification path (or use active markdown)",
+      placeHolder: "path/to/spec.md",
+      value: defaultSpec,
+      ignoreFocusOut: true
+    });
+    if (!specInput || specInput.trim().length === 0) {
+      return;
+    }
+    const resolvedSpec = path.isAbsolute(specInput.trim()) ? specInput.trim() : vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0 ? path.join(vscode.workspace.workspaceFolders[0].uri.fsPath, specInput.trim()) : path.resolve(specInput.trim());
+    if (!fs.existsSync(resolvedSpec)) {
+      vscode.window.showErrorMessage(`Haetae: Specification file not found: ${resolvedSpec}`);
+      return;
+    }
+    await vscode.window.withProgress({
+      location: vscode.ProgressLocation.Notification,
+      title: `Haetae: Synthesizing code from specification (${path.basename(resolvedSpec)})...`,
+      cancellable: false
+    }, async () => {
+      const res = await runHaetaeCommand(["new", "--spec", resolvedSpec]);
+      diagChannel.clear();
+      diagChannel.appendLine("============================================================");
+      diagChannel.appendLine("Haetae Spec-to-Code Synthesis Report");
+      diagChannel.appendLine("============================================================");
+      if (res.stdout && res.stdout.trim().length > 0) {
+        diagChannel.appendLine(res.stdout);
+      }
+      if (res.stderr && res.stderr.trim().length > 0) {
+        diagChannel.appendLine(res.stderr);
+      }
+      if (res.code === 0) {
+        diagChannel.show(true);
+        vscode.window.showInformationMessage("Haetae: Spec-to-code synthesis succeeded. See Diagnostics.");
+      } else {
+        diagChannel.show(true);
+        vscode.window.showErrorMessage(`Haetae: Spec synthesis failed (exit code ${res.code}). See Diagnostics.`);
+      }
+    });
+  });
+  context.subscriptions.push(newSpecCommand);
   if (typeof vscode.window.onDidStartTerminalShellExecution === "function") {
     const shellIntegrationSub = vscode.window.onDidStartTerminalShellExecution(async (event) => {
       try {
@@ -824,14 +907,48 @@ ${statusRes.stdout.trim()}`);
           }
           const editor = vscode.window.activeTextEditor;
           if (editor && output.trim().length > 0) {
-            const cleanCode = output.trim();
+            const cleanCode = cleanCodeOutput(output.trim());
             await editor.edit((editBuilder) => {
               if (trimmed.startsWith("haetae inline ")) {
-                editBuilder.insert(editor.selection.active, cleanCode);
+                editBuilder.insert(editor.selection.active, cleanCode + "\n");
               } else {
                 editBuilder.replace(editor.selection, cleanCode);
               }
             });
+          }
+        } else if (trimmed.startsWith("haetae verify")) {
+          const stream = event.read();
+          let output = "";
+          for await (const chunk of stream) {
+            output += chunk;
+          }
+          if (output.trim().length > 0) {
+            diagChannel.appendLine("[Terminal verify sync]");
+            diagChannel.appendLine(output.trim());
+          }
+          const hasHardwareCrash = output.includes("error[") || output.includes("CRASH");
+          if (hasHardwareCrash) {
+            verifyStatusBarItem.text = "$(error) Crash";
+          } else if (output.includes("SAFE") || output.includes("safe") || output.includes("PASS")) {
+            verifyStatusBarItem.text = "$(check) Safe";
+          }
+        } else if (trimmed.startsWith("haetae new ") || trimmed.startsWith("haetae spec ")) {
+          const stream = event.read();
+          let output = "";
+          for await (const chunk of stream) {
+            output += chunk;
+          }
+          if (output.trim().length > 0) {
+            diagChannel.appendLine("[Terminal spec sync]");
+            diagChannel.appendLine(output.trim());
+          }
+          const outMatch = trimmed.match(/--out\s+([^\s]+)/) || output.match(/Generated file:\s*([^\r\n]+)/);
+          if (outMatch && outMatch[1]) {
+            const targetPath = outMatch[1].trim();
+            if (fs.existsSync(targetPath)) {
+              const doc = await vscode.workspace.openTextDocument(targetPath);
+              await vscode.window.showTextDocument(doc);
+            }
           }
         }
       } catch {
