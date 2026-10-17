@@ -1,6 +1,6 @@
 #[allow(unused_imports)]
 use haetae_core::config::{
-    CLANG_ENV_VAR, CLANG_FLAG_COMPILE_ONLY, CLANG_FLAG_FPIC, CLANG_FLAG_SHARED, CLANG_OPT_O0,
+    ALT_SIGNAL_STACK_SIZE_BYTES, CLANG_ENV_VAR, CLANG_FLAG_COMPILE_ONLY, CLANG_FLAG_FPIC, CLANG_FLAG_SHARED, CLANG_OPT_O0,
     CLANG_OPT_O2, CLANG_TEMP_PREFIX, COFF_FILE_HEADER_BYTES, COFF_NUM_SECTIONS_OFFSET,
     COFF_OPTHDR_SIZE_OFFSET, COFF_SECTION_HEADER_BYTES, COFF_SECTION_NAME_BYTES,
     COFF_SECTION_RAW_PTR_OFFSET, COFF_SECTION_RAW_SIZE_OFFSET, ELF_CLASS_64, HEX_RADIX, MAX_STACK_FRAME_BYTES,
@@ -724,7 +724,7 @@ __attribute__((visibility("default"))) int haetae_safe_call_multi(const long lon
 "#,
             max_stack_bytes = MAX_STACK_FRAME_BYTES,
             stack_margin = MODEL_DOWNLOAD_CHUNK_SIZE,
-            alt_stack_size = MODEL_DOWNLOAD_CHUNK_SIZE << 1,
+            alt_stack_size = ALT_SIGNAL_STACK_SIZE_BYTES,
             hex_radix = HEX_RADIX,
             stack_overflow = WIN_EXCEPTION_STACK_OVERFLOW,
             int_div_zero = WIN_EXCEPTION_INT_DIVIDE_BY_ZERO,
