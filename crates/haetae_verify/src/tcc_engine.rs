@@ -3,7 +3,7 @@ use haetae_core::config::{
     CLANG_ENV_VAR, CLANG_FLAG_COMPILE_ONLY, CLANG_FLAG_FPIC, CLANG_FLAG_SHARED, CLANG_OPT_O0,
     CLANG_OPT_O2, CLANG_TEMP_PREFIX, COFF_FILE_HEADER_BYTES, COFF_NUM_SECTIONS_OFFSET,
     COFF_OPTHDR_SIZE_OFFSET, COFF_SECTION_HEADER_BYTES, COFF_SECTION_NAME_BYTES,
-    COFF_SECTION_RAW_PTR_OFFSET, COFF_SECTION_RAW_SIZE_OFFSET, HEX_RADIX, MAX_STACK_FRAME_BYTES,
+    COFF_SECTION_RAW_PTR_OFFSET, COFF_SECTION_RAW_SIZE_OFFSET, ELF_CLASS_64, HEX_RADIX, MAX_STACK_FRAME_BYTES,
     MODEL_DOWNLOAD_CHUNK_SIZE, POSIX_SIGFPE, POSIX_SIGSEGV, WIN_EXCEPTION_ACCESS_VIOLATION,
     WIN_EXCEPTION_FLT_DIVIDE_BY_ZERO, WIN_EXCEPTION_INT_DIVIDE_BY_ZERO,
     WIN_EXCEPTION_STACK_OVERFLOW,
@@ -248,7 +248,7 @@ impl TccEngine {
         if obj_bytes.len() < std::mem::size_of::<Elf64Hdr>() || !obj_bytes.starts_with(b"\x7fELF") {
             return None;
         }
-        if obj_bytes.get(std::mem::size_of::<u32>()).copied() != Some(1 << 1) {
+        if obj_bytes.get(std::mem::size_of::<u32>()).copied() != Some(ELF_CLASS_64) {
             return None;
         }
 

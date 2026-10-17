@@ -46,6 +46,7 @@ pub const MODEL_DOWNLOAD_CHUNK_SIZE: usize = 65_536;
 pub const GGUF_HEADER_PROBE_BYTES: usize = 1_024;
 pub const GGUF_MAGIC_LE: u32 = 0x46554747;
 pub const GGUF_VERSION_V3: u32 = 3;
+pub const ELF_CLASS_64: u8 = 2;
 pub const MILLIS_PER_SEC: f64 = 1000.0;
 pub const FLOAT_EPSILON: f64 = 0.01;
 pub const MB_PER_GB: f64 = 1024.0;
