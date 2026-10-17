@@ -1,7 +1,5 @@
 use haetae_core::config::COLLISION_WINDOW_TOKENS;
 
-pub const MIN_COLLISION_WINDOW_TOKENS: usize = 2;
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ZipperDecoder {
     pub prefix_tokens: Vec<u32>,
@@ -15,7 +13,7 @@ impl ZipperDecoder {
         Self {
             prefix_tokens: prefix_seed.to_vec(),
             suffix_tokens: suffix_seed.to_vec(),
-            collision_window: collision_window.max(MIN_COLLISION_WINDOW_TOKENS),
+            collision_window: collision_window.max(COLLISION_WINDOW_TOKENS),
             converged: false,
         }
     }

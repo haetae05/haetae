@@ -1,9 +1,5 @@
 use crate::primitives::Primitive;
 
-const MIN_TYPED_PARAM_PARTS: usize = 2;
-const ARROW_OPERATOR_LEN: usize = 2;
-const MIN_BINARY_OP_PARAMS: usize = 2;
-
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ContractSpec {
     pub function_name: String,
@@ -176,12 +172,12 @@ pub fn parse_markdown_spec(content: &str) -> Vec<ContractSpec> {
                             }
                         }
                     } else {
-                        let parts: Vec<&str> = ptext.split_whitespace().collect();
-                        if parts.len() >= MIN_TYPED_PARAM_PARTS {
-                            spec.param_types.push(parts[0].to_string());
-                            spec.param_names.push(parts[1].to_string());
-                        } else if !parts.is_empty() {
-                            spec.param_names.push(parts[0].to_string());
+                        let mut parts = ptext.split_whitespace();
+                        if let (Some(first), Some(second)) = (parts.next(), parts.next()) {
+                            spec.param_types.push(first.to_string());
+                            spec.param_names.push(second.to_string());
+                        } else if let Some(only) = ptext.split_whitespace().next() {
+                            spec.param_names.push(only.to_string());
                             spec.param_types.push("int".to_string());
                         }
                     }
@@ -263,12 +259,12 @@ fn parse_function_signature(sig: &str) -> Option<(String, String, Vec<String>, V
                 param_names.push(name);
                 param_types.push(ptype);
             } else {
-                let pieces: Vec<&str> = part_trim.split_whitespace().collect();
-                if pieces.len() >= MIN_TYPED_PARAM_PARTS {
-                    param_types.push(pieces[0].to_string());
-                    param_names.push(pieces[1].to_string());
-                } else if !pieces.is_empty() {
-                    param_names.push(pieces[0].to_string());
+                let mut pieces = part_trim.split_whitespace();
+                if let (Some(first), Some(second)) = (pieces.next(), pieces.next()) {
+                    param_types.push(first.to_string());
+                    param_names.push(second.to_string());
+                } else if let Some(only) = part_trim.split_whitespace().next() {
+                    param_names.push(only.to_string());
                     param_types.push("int".to_string());
                 }
             }
@@ -278,7 +274,7 @@ fn parse_function_signature(sig: &str) -> Option<(String, String, Vec<String>, V
     let mut ret_type = "int".to_string();
     let suffix = &sig[close_idx + 1..].trim();
     if let Some(arrow_idx) = suffix.find("->") {
-        let after_arrow = &suffix[arrow_idx + ARROW_OPERATOR_LEN..].trim();
+        let after_arrow = &suffix[arrow_idx + "->".len()..].trim();
         let ret_name = after_arrow.split_whitespace().next().unwrap_or("int");
         ret_type = ret_name.trim_matches('{').trim().to_string();
     }
@@ -291,6 +287,7 @@ fn parse_function_signature(sig: &str) -> Option<(String, String, Vec<String>, V
 ///
 /// CRITICAL MANDATE:
 /// Must NOT be used as a mock or silent fallback for Ollama inference in CLI `handle_spec`.
+#[allow(clippy::get_first)]
 pub fn generate_c_implementation(spec: &ContractSpec) -> String {
     let mut out = String::new();
     let ret = match spec.return_type.as_str() {
@@ -343,21 +340,22 @@ pub fn generate_c_implementation(spec: &ContractSpec) -> String {
 
     if spec.param_names.is_empty() {
         out.push_str("    return 0;\n");
-    } else if spec.function_name.contains("divide")
-        && spec.param_names.len() >= MIN_BINARY_OP_PARAMS
-    {
-        let v0 = &spec.param_names[0];
-        let v1 = &spec.param_names[1];
-        out.push_str(&format!(
-            "    #if defined(__aarch64__) || defined(_M_ARM64)\n    haetae_aarch64_div_guard({});\n    #endif\n",
-            v1
-        ));
-        out.push_str(&format!(
-            "    return ({} == 0) ? 0 : ({} / {});\n",
-            v1, v0, v1
-        ));
+    } else if spec.function_name.contains("divide") {
+        if let (Some(v0), Some(v1)) = (spec.param_names.get(0), spec.param_names.get(1)) {
+            out.push_str(&format!(
+                "    #if defined(__aarch64__) || defined(_M_ARM64)\n    haetae_aarch64_div_guard({});\n    #endif\n",
+                v1
+            ));
+            out.push_str(&format!(
+                "    return ({} == 0) ? 0 : ({} / {});\n",
+                v1, v0, v1
+            ));
+        } else {
+            let first_var = spec.param_names.first().map(|s| s.as_str()).unwrap_or("0");
+            out.push_str(&format!("    return {};\n", first_var));
+        }
     } else {
-        let first_var = &spec.param_names[0];
+        let first_var = spec.param_names.first().map(|s| s.as_str()).unwrap_or("0");
         out.push_str(&format!("    return {};\n", first_var));
     }
     out.push_str("}\n");

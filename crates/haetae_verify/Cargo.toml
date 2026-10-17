@@ -9,7 +9,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
 
-[target.'cfg(all(target_os = "linux", not(miri)))'.dependencies]
+[target.'cfg(unix)'.dependencies]
 libc = "0.2"
 
 [lints]

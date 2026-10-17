@@ -17,9 +17,14 @@ pub const FUZZ_MODE_MASK: usize = 1;
 pub const FUZZ_MODE_ADD_ONE: usize = 2;
 pub const FUZZ_MODE_SMALL_OFFSET: usize = 3;
 
-pub const FUZZ_MASKS_COUNT: usize = 5;
-pub const FUZZ_MASK_INDEX_2: usize = 2;
-pub const FUZZ_MASK_INDEX_3: usize = 3;
+pub const FUZZ_MASKS: [u64; 5] = [
+    FUZZ_MUTATION_MASK_1,
+    FUZZ_MUTATION_MASK_2,
+    FUZZ_MUTATION_MASK_3,
+    FUZZ_MUTATION_MASK_4,
+    FUZZ_MUTATION_MASK_5,
+];
+pub const FUZZ_MASKS_COUNT: usize = FUZZ_MASKS.len();
 
 pub const FUZZ_OFFSET_RANGE_BIAS: usize = 128;
 pub const FUZZ_OFFSET_RANGE_SPAN: usize = 256;
@@ -148,6 +153,64 @@ impl FuzzerEngine {
         boundaries
     }
 
+    pub fn sample_payload(
+        &self,
+        boundaries: &[i64],
+        prng: &mut XorShift64,
+        iteration: usize,
+    ) -> i64 {
+        if iteration < boundaries.len() {
+            boundaries[iteration]
+        } else {
+            let mode = prng.next_range(FUZZ_MUTATION_MODES_COUNT);
+            if mode == FUZZ_MODE_RANDOM {
+                prng.next_i64()
+            } else if mode == FUZZ_MODE_MASK {
+                let idx = prng.next_range(boundaries.len());
+                let base = boundaries[idx];
+                let mask = FUZZ_MASKS[prng.next_range(FUZZ_MASKS.len())];
+                base ^ (mask as i64)
+            } else if mode == FUZZ_MODE_ADD_ONE {
+                let idx = prng.next_range(boundaries.len());
+                boundaries[idx].wrapping_add(1)
+            } else {
+                (prng.next_range(FUZZ_OFFSET_RANGE_SPAN) as i64)
+                    - (FUZZ_OFFSET_RANGE_BIAS as i64)
+            }
+        }
+    }
+
+    pub fn sample_multi_args(
+        &self,
+        boundaries: &[i64],
+        prng: &mut XorShift64,
+        iteration: usize,
+        payload: i64,
+    ) -> [i64; FUZZ_MAX_ARG_COUNT] {
+        let mut multi_args = [0i64; FUZZ_MAX_ARG_COUNT];
+        if let Some((first, rest)) = multi_args.split_first_mut() {
+            *first = payload;
+            if iteration < boundaries.len() {
+                for (arg, &boundary) in rest
+                    .iter_mut()
+                    .zip(boundaries.iter().cycle().skip(iteration + 1))
+                {
+                    *arg = boundary;
+                }
+            } else {
+                for arg in rest.iter_mut() {
+                    if prng.next_range(FUZZ_ARG_RANDOM_CHANCE) == 0 {
+                        let b_idx = prng.next_range(boundaries.len());
+                        *arg = boundaries[b_idx];
+                    } else {
+                        *arg = prng.next_i64();
+                    }
+                }
+            }
+        }
+        multi_args
+    }
+
     #[cfg(all(target_os = "linux", not(miri)))]
     pub fn run_fuzz_loop(
         &self,
@@ -192,51 +255,8 @@ impl FuzzerEngine {
             let mut prng = XorShift64::new(XORSHIFT_DEFAULT_SEED);
 
             for i in 0..self.max_iterations {
-                let payload = if i < boundaries.len() {
-                    boundaries[i]
-                } else {
-                    let mode = prng.next_range(FUZZ_MUTATION_MODES_COUNT);
-                    if mode == FUZZ_MODE_RANDOM {
-                        prng.next_i64()
-                    } else if mode == FUZZ_MODE_MASK {
-                        let idx = prng.next_range(boundaries.len());
-                        let base = boundaries[idx];
-                        let mask = match prng.next_range(FUZZ_MASKS_COUNT) {
-                            0 => FUZZ_MUTATION_MASK_1,
-                            1 => FUZZ_MUTATION_MASK_2,
-                            FUZZ_MASK_INDEX_2 => FUZZ_MUTATION_MASK_3,
-                            FUZZ_MASK_INDEX_3 => FUZZ_MUTATION_MASK_4,
-                            _ => FUZZ_MUTATION_MASK_5,
-                        };
-                        base ^ (mask as i64)
-                    } else if mode == FUZZ_MODE_ADD_ONE {
-                        let idx = prng.next_range(boundaries.len());
-                        boundaries[idx].wrapping_add(1)
-                    } else {
-                        (prng.next_range(FUZZ_OFFSET_RANGE_SPAN) as i64)
-                            - (FUZZ_OFFSET_RANGE_BIAS as i64)
-                    }
-                };
-
-                let mut multi_args = [0i64; FUZZ_MAX_ARG_COUNT];
-                if i < boundaries.len() {
-                    multi_args[0] = payload;
-                    let b_len = boundaries.len();
-                    for (arg_idx, arg) in multi_args[1..].iter_mut().enumerate() {
-                        let offset = (i + arg_idx + 1) % b_len;
-                        *arg = boundaries[offset];
-                    }
-                } else {
-                    multi_args[0] = payload;
-                    for arg in &mut multi_args[1..] {
-                        if prng.next_range(FUZZ_ARG_RANDOM_CHANCE) == 0 {
-                            let b_idx = prng.next_range(boundaries.len());
-                            *arg = boundaries[b_idx];
-                        } else {
-                            *arg = prng.next_i64();
-                        }
-                    }
-                }
+                let payload = self.sample_payload(&boundaries, &mut prng, i);
+                let multi_args = self.sample_multi_args(&boundaries, &mut prng, i, payload);
 
                 unsafe {
                     (*shm_ptr).current_payload = payload;
@@ -330,51 +350,8 @@ impl FuzzerEngine {
         let mut prng = XorShift64::new(XORSHIFT_DEFAULT_SEED);
 
         for i in 0..self.max_iterations {
-            let payload = if i < boundaries.len() {
-                boundaries[i]
-            } else {
-                let mode = prng.next_range(FUZZ_MUTATION_MODES_COUNT);
-                if mode == FUZZ_MODE_RANDOM {
-                    prng.next_i64()
-                } else if mode == FUZZ_MODE_MASK {
-                    let idx = prng.next_range(boundaries.len());
-                    let base = boundaries[idx];
-                    let mask = match prng.next_range(FUZZ_MASKS_COUNT) {
-                        0 => FUZZ_MUTATION_MASK_1,
-                        1 => FUZZ_MUTATION_MASK_2,
-                        FUZZ_MASK_INDEX_2 => FUZZ_MUTATION_MASK_3,
-                        FUZZ_MASK_INDEX_3 => FUZZ_MUTATION_MASK_4,
-                        _ => FUZZ_MUTATION_MASK_5,
-                    };
-                    base ^ (mask as i64)
-                } else if mode == FUZZ_MODE_ADD_ONE {
-                    let idx = prng.next_range(boundaries.len());
-                    boundaries[idx].wrapping_add(1)
-                } else {
-                    (prng.next_range(FUZZ_OFFSET_RANGE_SPAN) as i64)
-                        - (FUZZ_OFFSET_RANGE_BIAS as i64)
-                }
-            };
-
-            let mut multi_args = [0i64; FUZZ_MAX_ARG_COUNT];
-            if i < boundaries.len() {
-                multi_args[0] = payload;
-                let b_len = boundaries.len();
-                for (arg_idx, arg) in multi_args[1..].iter_mut().enumerate() {
-                    let offset = (i + arg_idx + 1) % b_len;
-                    *arg = boundaries[offset];
-                }
-            } else {
-                multi_args[0] = payload;
-                for arg in &mut multi_args[1..] {
-                    if prng.next_range(FUZZ_ARG_RANDOM_CHANCE) == 0 {
-                        let b_idx = prng.next_range(boundaries.len());
-                        *arg = boundaries[b_idx];
-                    } else {
-                        *arg = prng.next_i64();
-                    }
-                }
-            }
+            let payload = self.sample_payload(&boundaries, &mut prng, i);
+            let multi_args = self.sample_multi_args(&boundaries, &mut prng, i, payload);
 
             let exec_res = tcc.execute_entry_with_payloads(code, &multi_args);
             match exec_res {

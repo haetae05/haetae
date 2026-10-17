@@ -24,6 +24,7 @@ pub const SUPPORTED_LANGUAGES_COUNT: usize = 15;
 pub const DEFAULT_FUZZ_ITERATIONS: usize = 10_000;
 pub const MAX_STACK_FRAME_BYTES: usize = 1_048_576;
 pub const MAX_CALL_STACK_DEPTH: usize = 64;
+pub const CACHE_LINE_BYTES: usize = 64;
 pub const L3_CACHE_BOUND_MB: usize = 32;
 pub const WEIGHT_SLICE_SIZE_MB: usize = 35;
 pub const L3_SAFETY_MARGIN_MB: usize = 5;

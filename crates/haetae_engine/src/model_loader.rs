@@ -1,25 +1,20 @@
 use crate::ring_buffer::WeightRingBuffer;
-use crate::zipper::ZipperDecoder;
 use haetae_core::config::{
     GGUF_HEADER_PROBE_BYTES, GGUF_MAGIC_LE, GGUF_VERSION_V3, HTTP_OK, HTTP_PARTIAL_CONTENT,
     HTTP_TIMEOUT_SECS,
 };
 use std::time::Duration;
 
-pub const GGUF_MAGIC_SIZE: usize = 4;
-pub const GGUF_VERSION_SIZE: usize = 4;
-pub const GGUF_TENSOR_COUNT_SIZE: usize = 8;
-pub const GGUF_METADATA_COUNT_SIZE: usize = 8;
+pub const GGUF_MAGIC_SIZE: usize = std::mem::size_of::<u32>();
+pub const GGUF_VERSION_SIZE: usize = std::mem::size_of::<u32>();
+pub const GGUF_TENSOR_COUNT_SIZE: usize = std::mem::size_of::<u64>();
+pub const GGUF_METADATA_COUNT_SIZE: usize = std::mem::size_of::<u64>();
 
 pub const GGUF_MAGIC_END: usize = GGUF_MAGIC_SIZE;
 pub const GGUF_VERSION_END: usize = GGUF_MAGIC_END + GGUF_VERSION_SIZE;
 pub const GGUF_TENSOR_COUNT_END: usize = GGUF_VERSION_END + GGUF_TENSOR_COUNT_SIZE;
 pub const GGUF_METADATA_COUNT_END: usize = GGUF_TENSOR_COUNT_END + GGUF_METADATA_COUNT_SIZE;
 pub const GGUF_MIN_HEADER_BYTES: usize = GGUF_METADATA_COUNT_END;
-
-pub const BYTE_VOCAB_SIZE: usize = 256;
-pub const MIN_ZIPPER_INFERENCE_STEPS: usize = 16;
-pub const MAX_BYTE_TOKEN_ID: u32 = 255;
 
 #[derive(Debug, thiserror::Error)]
 pub enum ModelError {
@@ -134,49 +129,5 @@ impl ModelLoader {
     pub fn stream_slice_into_ring(&self, slice_data: &[u8], ring: &mut WeightRingBuffer) {
         ring.prefetch_next_slice(slice_data);
         ring.swap_buffers();
-    }
-
-    pub fn generate_with_zipper(&self, prompt: &str, zipper: &mut ZipperDecoder) -> String {
-        let prompt_bytes = prompt.as_bytes();
-        let vocab_size = BYTE_VOCAB_SIZE;
-        let max_steps = prompt_bytes.len().max(MIN_ZIPPER_INFERENCE_STEPS);
-
-        for step in 0..max_steps {
-            let mut fwd_logits = vec![0.0f32; vocab_size];
-            let mut bwd_logits = vec![0.0f32; vocab_size];
-
-            let fwd_byte = if step < prompt_bytes.len() {
-                prompt_bytes[step]
-            } else {
-                b'\n'
-            };
-            let bwd_byte = if step < prompt_bytes.len() {
-                prompt_bytes[prompt_bytes.len() - 1 - step]
-            } else {
-                b'\n'
-            };
-
-            fwd_logits[fwd_byte as usize] = 1.0;
-            bwd_logits[bwd_byte as usize] = 1.0;
-
-            let _ = zipper.step_dual_tokens(&fwd_logits, &bwd_logits);
-            if zipper.converged {
-                break;
-            }
-        }
-
-        let stitched = zipper.stitch_sequence();
-        let mut out_bytes = Vec::new();
-        for tok in stitched {
-            if tok <= MAX_BYTE_TOKEN_ID {
-                out_bytes.push(tok as u8);
-            }
-        }
-
-        if out_bytes.is_empty() {
-            String::from_utf8_lossy(prompt_bytes).to_string()
-        } else {
-            String::from_utf8_lossy(&out_bytes).to_string()
-        }
     }
 }

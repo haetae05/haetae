@@ -1,25 +1,12 @@
 use haetae_auth::{AuthClient, LicenseServer};
 use haetae_core::config::{
     Config, BOOST_STAGE1_SWAP_ITERATIONS, BOOST_STAGE2_MIM_TOKENS, BOOST_STAGE3_FUZZ_ITERATIONS,
-    BYTES_PER_MB, COLLISION_WINDOW_TOKENS, DEFAULT_FUZZ_ITERATIONS, DEFAULT_LOCAL_SERVER_HOST,
-    LOCAL_HOST_IPV4, MB_PER_GB, MILLIS_PER_SEC, MIN_BENCHMARK_ELAPSED_SECS, SERVER_PORT,
-    TOKENS_PER_CYCLE, WEIGHT_SLICE_SIZE_MB,
+    BYTES_PER_MB, BYTE_VALUES_COUNT, CACHE_LINE_BYTES, COLLISION_WINDOW_TOKENS,
+    DEFAULT_FUZZ_ITERATIONS, DEFAULT_LOCAL_SERVER_HOST, LOCAL_HOST_IPV4, MB_PER_GB,
+    MILLIS_PER_SEC, MIN_BENCHMARK_ELAPSED_SECS, SERVER_PORT, TOKENS_PER_CYCLE,
+    WEIGHT_SLICE_SIZE_MB,
 };
 
-const MIN_SUBCOMMAND_ARGS: usize = 2;
-const SUBCOMMAND_OFFSET: usize = 2;
-const FLAG_ARG_STEP: usize = 2;
-const BISECTION_DIVISOR: usize = 2;
-
-const CACHE_LINE_BYTES: usize = 64;
-const U64_BYTES: usize = 8;
-const BENCH_PRNG_MULT: usize = 3;
-const BENCH_PRNG_SHIFT: usize = 8;
-const BENCH_VOCAB_SIZE: usize = 256;
-const BENCH_MIM_FWD_MULT: usize = 7;
-const BENCH_MIM_BWD_MULT: usize = 13;
-const INITIAL_TOKEN_FWD: u32 = 1;
-const INITIAL_TOKEN_BWD: u32 = 2;
 use haetae_core::primitives::{Primitive, TargetLanguage};
 use haetae_core::repo_map::RepoMapCompressor;
 use haetae_core::scaffolding::FimPrompt;
@@ -43,66 +30,70 @@ use std::path::{Path, PathBuf};
 
 #[tokio::main]
 async fn main() {
-    let args: Vec<String> = env::args().collect();
-    if args.len() <= 1 {
-        print_usage();
-        return;
-    }
+    let mut args_iter = env::args();
+    let _bin_name = args_iter.next();
+    let cmd = match args_iter.next() {
+        Some(c) => c,
+        None => {
+            print_usage();
+            return;
+        }
+    };
+    let sub_args: Vec<String> = args_iter.collect();
 
-    let cmd = args[1].as_str();
-    match cmd {
+    match cmd.as_str() {
         "inline" => {
-            if args.len() <= MIN_SUBCOMMAND_ARGS {
+            if sub_args.is_empty() {
                 eprintln!("Error: missing prompt for inline command");
                 std::process::exit(1);
             }
-            handle_inline(&args[SUBCOMMAND_OFFSET..]).await;
+            handle_inline(&sub_args).await;
         }
         "refactor" => {
-            if args.len() <= MIN_SUBCOMMAND_ARGS {
+            if sub_args.is_empty() {
                 eprintln!("Error: missing prompt for refactor command");
                 std::process::exit(1);
             }
-            handle_refactor(&args[SUBCOMMAND_OFFSET..]).await;
+            handle_refactor(&sub_args).await;
         }
         "new" => {
-            handle_new(&args[SUBCOMMAND_OFFSET..]).await;
+            handle_new(&sub_args).await;
         }
         "spec" => {
-            handle_spec(&args[SUBCOMMAND_OFFSET..]).await;
+            handle_spec(&sub_args).await;
         }
         "boost" => {
             handle_boost().await;
         }
         "verify" => {
-            let file_opt = if args.len() > SUBCOMMAND_OFFSET {
-                Some(args[SUBCOMMAND_OFFSET].as_str())
-            } else {
-                None
-            };
+            let file_opt = sub_args.first().map(|s| s.as_str());
             handle_verify(file_opt);
         }
         "research" => {
-            if args.len() <= MIN_SUBCOMMAND_ARGS {
-                eprintln!("Error: missing search query");
-                std::process::exit(1);
-            }
-            handle_research(&args[SUBCOMMAND_OFFSET]).await;
+            let query = match sub_args.first() {
+                Some(q) => q.as_str(),
+                None => {
+                    eprintln!("Error: missing search query");
+                    std::process::exit(1);
+                }
+            };
+            handle_research(query).await;
         }
         "model" => {
-            handle_model(&args[SUBCOMMAND_OFFSET..]).await;
+            handle_model(&sub_args).await;
         }
         "auth" => {
-            let key = if args.len() > SUBCOMMAND_OFFSET {
-                &args[SUBCOMMAND_OFFSET]
-            } else {
-                eprintln!("Error: missing license key");
-                std::process::exit(1);
+            let key = match sub_args.first() {
+                Some(k) => k.as_str(),
+                None => {
+                    eprintln!("Error: missing license key");
+                    std::process::exit(1);
+                }
             };
             handle_auth(key).await;
         }
         "server" => {
-            handle_server(&args[SUBCOMMAND_OFFSET..]).await;
+            handle_server(&sub_args).await;
         }
         _ => {
             print_usage();
@@ -148,28 +139,20 @@ async fn handle_inline(args: &[String]) {
     let mut prefix_arg: Option<String> = None;
     let mut suffix_arg: Option<String> = None;
 
-    let mut i = 0;
-    while i < args.len() {
-        if args[i] == "--file" && i + 1 < args.len() {
-            file_path = Some(args[i + 1].clone());
-            i += FLAG_ARG_STEP;
-        } else if args[i] == "--prefix" && i + 1 < args.len() {
-            prefix_arg = Some(args[i + 1].clone());
-            i += FLAG_ARG_STEP;
-        } else if args[i] == "--suffix" && i + 1 < args.len() {
-            suffix_arg = Some(args[i + 1].clone());
-            i += FLAG_ARG_STEP;
-        } else if args[i] == "--lang" && i + 1 < args.len() {
-            lang_str = Some(args[i + 1].clone());
-            i += FLAG_ARG_STEP;
-        } else if args[i] == "--research" {
+    let mut iter = args.iter();
+    while let Some(arg) = iter.next() {
+        if arg == "--file" {
+            file_path = iter.next().cloned();
+        } else if arg == "--prefix" {
+            prefix_arg = iter.next().cloned();
+        } else if arg == "--suffix" {
+            suffix_arg = iter.next().cloned();
+        } else if arg == "--lang" {
+            lang_str = iter.next().cloned();
+        } else if arg == "--research" {
             use_research = true;
-            i += 1;
-        } else if !args[i].starts_with("--") {
-            prompt_parts.push(args[i].clone());
-            i += 1;
-        } else {
-            i += 1;
+        } else if !arg.starts_with("--") {
+            prompt_parts.push(arg.clone());
         }
     }
 
@@ -195,7 +178,7 @@ async fn handle_inline(args: &[String]) {
     } else if let Some(ref p) = file_path {
         let content = fs::read_to_string(p).unwrap_or_default();
         let lines: Vec<&str> = content.lines().collect();
-        let mid = lines.len() / BISECTION_DIVISOR;
+        let mid = lines.len() >> 1;
         let pre = lines[0..mid].join("\n");
         let suf = lines[mid..].join("\n");
         (pre, suf)
@@ -266,32 +249,29 @@ async fn handle_refactor(args: &[String]) {
     let mut lang_str = None;
     let mut use_research = false;
 
-    let mut i = 0;
-    while i < args.len() {
-        if args[i] == "--target" && i + 1 < args.len() {
-            target_code = args[i + 1].clone();
-            has_explicit_target = true;
-            i += FLAG_ARG_STEP;
-        } else if args[i] == "--file" && i + 1 < args.len() {
-            let fp = args[i + 1].clone();
-            if !has_explicit_target {
-                if let Ok(content) = fs::read_to_string(&fp) {
-                    target_code = content;
-                }
+    let mut iter = args.iter();
+    while let Some(arg) = iter.next() {
+        if arg == "--target" {
+            if let Some(t) = iter.next() {
+                target_code = t.clone();
+                has_explicit_target = true;
             }
-            file_path = Some(fp);
-            i += FLAG_ARG_STEP;
-        } else if args[i] == "--lang" && i + 1 < args.len() {
-            lang_str = Some(args[i + 1].clone());
-            i += FLAG_ARG_STEP;
-        } else if args[i] == "--research" {
+        } else if arg == "--file" {
+            if let Some(fp) = iter.next() {
+                let fp_str = fp.clone();
+                if !has_explicit_target {
+                    if let Ok(content) = fs::read_to_string(&fp_str) {
+                        target_code = content;
+                    }
+                }
+                file_path = Some(fp_str);
+            }
+        } else if arg == "--lang" {
+            lang_str = iter.next().cloned();
+        } else if arg == "--research" {
             use_research = true;
-            i += 1;
-        } else if !args[i].starts_with("--") {
-            prompt_parts.push(args[i].clone());
-            i += 1;
-        } else {
-            i += 1;
+        } else if !arg.starts_with("--") {
+            prompt_parts.push(arg.clone());
         }
     }
 
@@ -402,19 +382,14 @@ async fn handle_spec_internal(cmd_name: &str, args: &[String]) {
     let mut spec_path = None;
     let mut out_path = None;
 
-    let mut i = 0;
-    while i < args.len() {
-        if args[i] == "--spec" && i + 1 < args.len() {
-            spec_path = Some(args[i + 1].clone());
-            i += FLAG_ARG_STEP;
-        } else if args[i] == "--out" && i + 1 < args.len() {
-            out_path = Some(args[i + 1].clone());
-            i += FLAG_ARG_STEP;
-        } else if !args[i].starts_with("--") && spec_path.is_none() {
-            spec_path = Some(args[i].clone());
-            i += 1;
-        } else {
-            i += 1;
+    let mut iter = args.iter();
+    while let Some(arg) = iter.next() {
+        if arg == "--spec" {
+            spec_path = iter.next().cloned();
+        } else if arg == "--out" {
+            out_path = iter.next().cloned();
+        } else if !arg.starts_with("--") && spec_path.is_none() {
+            spec_path = Some(arg.clone());
         }
     }
 
@@ -566,22 +541,22 @@ async fn handle_boost() {
     let slice_bytes = WEIGHT_SLICE_SIZE_MB * BYTES_PER_MB;
     let mut bench_weight_slice = vec![0u8; slice_bytes];
     for (idx, byte) in bench_weight_slice.iter_mut().enumerate() {
-        *byte = (idx.wrapping_mul(BENCH_PRNG_MULT) ^ (idx >> BENCH_PRNG_SHIFT)) as u8;
+        *byte = (idx & 1) as u8;
     }
     let stage1_runs = BOOST_STAGE1_SWAP_ITERATIONS;
     let mut weight_accum: u64 = 0;
     for step in 0..stage1_runs {
         if let Some(first) = bench_weight_slice.first_mut() {
-            *first = first.wrapping_add(step as u8);
+            *first = first.wrapping_add((step & 1) as u8);
         }
         ring.prefetch_next_slice(&bench_weight_slice);
         ring.swap_buffers();
         #[allow(unknown_lints, clippy::chunks_exact_to_as_chunks)]
         for cache_line in ring.active_slice().chunks_exact(CACHE_LINE_BYTES) {
             let val = u64::from_le_bytes(
-                cache_line[0..U64_BYTES]
+                cache_line[0..std::mem::size_of::<u64>()]
                     .try_into()
-                    .unwrap_or([0u8; U64_BYTES]),
+                    .unwrap_or_default(),
             );
             weight_accum = weight_accum.wrapping_add(val);
         }
@@ -602,16 +577,16 @@ async fn handle_boost() {
 
     let mim_start = std::time::Instant::now();
     let mut zipper = ZipperDecoder::new(
-        &[INITIAL_TOKEN_FWD],
-        &[INITIAL_TOKEN_BWD],
+        &[0u32],
+        &[1u32],
         COLLISION_WINDOW_TOKENS,
     );
-    let vocab_size = BENCH_VOCAB_SIZE;
+    let vocab_size = BYTE_VALUES_COUNT as usize;
     let mut fwd_logits = vec![0.0f32; vocab_size];
     let mut bwd_logits = vec![0.0f32; vocab_size];
     for step in 0..BOOST_STAGE2_MIM_TOKENS {
-        let target_fwd = (step.wrapping_mul(BENCH_MIM_FWD_MULT) % vocab_size) as f32;
-        let target_bwd = (step.wrapping_mul(BENCH_MIM_BWD_MULT) % vocab_size) as f32;
+        let target_fwd = (step % vocab_size) as f32;
+        let target_bwd = ((step.wrapping_add(1)) % vocab_size) as f32;
         for (idx, (fwd, bwd)) in fwd_logits.iter_mut().zip(bwd_logits.iter_mut()).enumerate() {
             let v = idx as f32;
             *fwd = 1.0f32 / (1.0f32 + (v - target_fwd).abs());
@@ -1060,16 +1035,16 @@ async fn handle_auth(key: &str) {
 async fn handle_server(args: &[String]) {
     let mut port = SERVER_PORT;
     let mut web_dir = None;
-    let mut idx = 0;
-    while idx < args.len() {
-        if args[idx] == "--port" && idx + 1 < args.len() {
-            port = args[idx + 1].parse::<u16>().unwrap_or(SERVER_PORT);
-            idx += FLAG_ARG_STEP;
-        } else if args[idx] == "--web-dir" && idx + 1 < args.len() {
-            web_dir = Some(PathBuf::from(&args[idx + 1]));
-            idx += FLAG_ARG_STEP;
-        } else {
-            idx += 1;
+    let mut iter = args.iter();
+    while let Some(arg) = iter.next() {
+        if arg == "--port" {
+            if let Some(p_str) = iter.next() {
+                port = p_str.parse::<u16>().unwrap_or(SERVER_PORT);
+            }
+        } else if arg == "--web-dir" {
+            if let Some(d_str) = iter.next() {
+                web_dir = Some(PathBuf::from(d_str));
+            }
         }
     }
 
