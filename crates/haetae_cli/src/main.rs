@@ -576,6 +576,7 @@ async fn handle_boost() {
         }
         ring.prefetch_next_slice(&bench_weight_slice);
         ring.swap_buffers();
+        #[allow(unknown_lints, clippy::chunks_exact_to_as_chunks)]
         for cache_line in ring.active_slice().chunks_exact(CACHE_LINE_BYTES) {
             let val = u64::from_le_bytes(
                 cache_line[0..U64_BYTES]
