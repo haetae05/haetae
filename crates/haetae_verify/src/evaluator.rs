@@ -1132,13 +1132,11 @@ pub fn evaluate_c_source(source: &str, payload: i64) -> Result<i32, VerifyError>
     populate_top_level_declarations(source, &mut env);
 
     if target_lines.is_empty() {
-        return Err(VerifyError::SymbolNotFound(
-            if !chosen_fn.is_empty() {
-                chosen_fn
-            } else {
-                "haetae_fuzz_entry".to_string()
-            },
-        ));
+        return Err(VerifyError::SymbolNotFound(if !chosen_fn.is_empty() {
+            chosen_fn
+        } else {
+            "haetae_fuzz_entry".to_string()
+        }));
     }
 
     execute_function_lines(&target_lines, &mut env, Some(source), 0)

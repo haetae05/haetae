@@ -88,7 +88,10 @@ async fn main() {
         "auth" => {
             let key = if let Some(k) = sub_args.first().filter(|s| !s.trim().is_empty()) {
                 k.trim().to_string()
-            } else if let Some(k) = std::env::var(ENV_HAETAE_LICENSE_KEY).ok().filter(|s| !s.trim().is_empty()) {
+            } else if let Some(k) = std::env::var(ENV_HAETAE_LICENSE_KEY)
+                .ok()
+                .filter(|s| !s.trim().is_empty())
+            {
                 k.trim().to_string()
             } else {
                 let mut stdin_buf = String::new();
@@ -252,11 +255,7 @@ async fn handle_inline(args: &[String]) {
     let zipper = if has_both_prefix_suffix {
         let prefix_tokens: Vec<u32> = prefix.bytes().map(|b| b as u32).collect();
         let suffix_tokens: Vec<u32> = suffix.bytes().map(|b| b as u32).collect();
-        let z = ZipperDecoder::new(
-            &prefix_tokens,
-            &suffix_tokens,
-            COLLISION_WINDOW_TOKENS,
-        );
+        let z = ZipperDecoder::new(&prefix_tokens, &suffix_tokens, COLLISION_WINDOW_TOKENS);
         let _ = z.check_collision();
         let _ = z.stitch_sequence();
         Some(z)
@@ -290,6 +289,9 @@ async fn handle_inline(args: &[String]) {
     eprintln!("{}", assembled);
 
     let client = InferenceClient::default_local();
+    if ensure_ollama_ready(&client).await.is_err() {
+        std::process::exit(1);
+    }
     let has_ctx = !prefix.is_empty() || !suffix.is_empty();
     let gen_res = if has_ctx {
         client.generate_fim(&assembled).await
@@ -418,11 +420,7 @@ async fn handle_refactor(args: &[String]) {
     let zipper = if has_both_prefix_suffix {
         let prefix_tokens: Vec<u32> = prefix.bytes().map(|b| b as u32).collect();
         let suffix_tokens: Vec<u32> = suffix.bytes().map(|b| b as u32).collect();
-        let z = ZipperDecoder::new(
-            &prefix_tokens,
-            &suffix_tokens,
-            COLLISION_WINDOW_TOKENS,
-        );
+        let z = ZipperDecoder::new(&prefix_tokens, &suffix_tokens, COLLISION_WINDOW_TOKENS);
         let _ = z.check_collision();
         let _ = z.stitch_sequence();
         Some(z)
@@ -473,6 +471,9 @@ async fn handle_refactor(args: &[String]) {
     eprintln!("{}", fim.assemble());
 
     let client = InferenceClient::default_local();
+    if ensure_ollama_ready(&client).await.is_err() {
+        std::process::exit(1);
+    }
     match client
         .generate_refactor(
             target_lang.identifier(),

@@ -198,9 +198,7 @@ impl AuthClient {
                         return LicenseTier::Pro;
                     }
                 }
-            } else if let Ok(payload) =
-                crate::crypto::parse_license_token_payload(&stored.token)
-            {
+            } else if let Ok(payload) = crate::crypto::parse_license_token_payload(&stored.token) {
                 let parts: Vec<&str> = stored.token.split('.').collect();
                 let sig_valid = parts.len() == TOKEN_PARTS_COUNT
                     && !parts[1].is_empty()
@@ -210,8 +208,7 @@ impl AuthClient {
                     && sig_valid
                     && now < payload.expires_at
                     && within_grace_period
-                    && (payload.machine_id == current_machine_id
-                        || payload.machine_id.is_empty())
+                    && (payload.machine_id == current_machine_id || payload.machine_id.is_empty())
                 {
                     self.set_cached_tier(LicenseTier::Pro);
                     return LicenseTier::Pro;

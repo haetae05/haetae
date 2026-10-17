@@ -1,4 +1,6 @@
-use haetae_core::config::{BYTES_PER_MB, COLLISION_WINDOW_TOKENS, L3_CACHE_BOUND_MB};
+use haetae_core::config::{
+    BYTES_PER_MB, COLLISION_WINDOW_TOKENS, L3_CACHE_BOUND_MB, L3_CACHE_PER_CORE_BOUND_MB,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ZipperDecoder {
@@ -108,6 +110,10 @@ impl ZipperDecoder {
 
     pub fn is_l3_compliant(&self) -> bool {
         self.buffer_size_bytes() <= (L3_CACHE_BOUND_MB * BYTES_PER_MB)
+    }
+
+    pub fn is_per_core_l3_compliant(&self) -> bool {
+        self.buffer_size_bytes() < (L3_CACHE_PER_CORE_BOUND_MB * BYTES_PER_MB)
     }
 }
 

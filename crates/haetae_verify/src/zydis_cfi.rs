@@ -11,47 +11,49 @@ pub use haetae_core::config::{
     AARCH64_STP_IMM7_SHIFT, AARCH64_STP_IMM7_SIGN_BIT, AARCH64_STP_PRE_MASK, AARCH64_STP_PRE_MATCH,
     AARCH64_STP_SCALE_BYTES, AARCH64_STP_SIGN_EXTEND, AARCH64_SUB_SP_EXACT_MASK,
     AARCH64_SUB_SP_EXACT_MATCH, AARCH64_SUB_SP_MASK, AARCH64_SUB_SP_MATCH,
-    AARCH64_SUB_SP_SH_AMOUNT, AARCH64_SUB_SP_SH_BIT, BUFFER_CAPACITY_BYTES,
-    ISA_SCORE_STRONG_MARKER, ISA_SCORE_WEAK_MARKER, RISCV_ADDI_IMM12_MASK, RISCV_ADDI_IMM12_SHIFT,
-    RISCV_ADDI_IMM12_SIGN_BIT, RISCV_ADDI_SIGN_EXTEND, RISCV_ADDI_SP_MASK, RISCV_ADDI_SP_MATCH,
-    RISCV_BRANCH_ALIGN_SHIFT, RISCV_BRANCH_OPCODE_MATCH, RISCV_COMPRESSED_INSN_BYTES,
-    RISCV_C_ADDI16SP_MASK, RISCV_C_ADDI16SP_MATCH, RISCV_C_ADDI16SP_SIGN_BIT, RISCV_C_BEQZ_MASK,
-    RISCV_C_BEQZ_MATCH, RISCV_C_BNEZ_MATCH, RISCV_C_JALR_RA_INSN, RISCV_C_JR_RA_INSN,
-    RISCV_C_J_MASK, RISCV_C_J_MATCH, RISCV_INSN_32BIT_MARKER, RISCV_INSN_BYTES,
-    RISCV_INSN_LEN_MASK, RISCV_JAL_OPCODE_MASK, RISCV_JAL_OPCODE_MATCH, RISCV_RET_INSN,
-    X86_ADD_IMM32_OP, X86_ADD_IMM8_OP, X86_ADD_REG_CODE, X86_ENDBR64_B0, X86_ENDBR64_B1,
-    X86_ENDBR64_B2, X86_ENDBR64_B3, X86_ENTER_OP, X86_LEAVE_OP, X86_MAX_INSN_LEN,
-    X86_MODRM_MOD_DIRECT, X86_MODRM_MOD_DISP32, X86_MODRM_MOD_DISP8, X86_MODRM_MOD_MASK,
-    X86_MODRM_REG_MASK, X86_MODRM_RM_DISP32_ONLY, X86_MODRM_RM_MASK, X86_MODRM_RM_SIB,
-    X86_MOV_RBP_RSP_B0, X86_MOV_RBP_RSP_B1, X86_MOV_RBP_RSP_B2, X86_NOP_OPCODE,
-    X86_OPCODE_CALL_REL32, X86_OPCODE_GRP1_IMM32, X86_OPCODE_GRP1_IMM8, X86_OPCODE_GRP3_NOT_NEG,
+    AARCH64_SUB_SP_SH_AMOUNT, AARCH64_SUB_SP_SH_BIT, BASE_DECIMAL, BISECTION_DIVISOR,
+    BUFFER_CAPACITY_BYTES, BYTE_ONE, BYTE_ZERO, DAYS_PER_WEEK, ISA_SCORE_STRONG_MARKER,
+    ISA_SCORE_WEAK_MARKER, MAX_STACK_FRAME_BYTES, RISCV_ADDI_IMM12_MASK,
+    RISCV_ADDI_IMM12_SHIFT, RISCV_ADDI_IMM12_SIGN_BIT, RISCV_ADDI_SIGN_EXTEND, RISCV_ADDI_SP_MASK,
+    RISCV_ADDI_SP_MATCH, RISCV_BRANCH_ALIGN_SHIFT, RISCV_BRANCH_OPCODE_MATCH,
+    RISCV_COMPRESSED_INSN_BYTES, RISCV_C_ADDI16SP_MASK, RISCV_C_ADDI16SP_MATCH,
+    RISCV_C_ADDI16SP_SIGN_BIT, RISCV_C_BEQZ_MASK, RISCV_C_BEQZ_MATCH, RISCV_C_BNEZ_MATCH,
+    RISCV_C_JALR_RA_INSN, RISCV_C_JR_RA_INSN, RISCV_C_J_MASK, RISCV_C_J_MATCH,
+    RISCV_INSN_32BIT_MARKER, RISCV_INSN_BYTES, RISCV_INSN_LEN_MASK, RISCV_JAL_OPCODE_MASK,
+    RISCV_JAL_OPCODE_MATCH, RISCV_RET_INSN, STEP_TRIO, VSIX_MAX_SIZE_MB, X86_ADD_IMM32_OP,
+    X86_ADD_IMM8_OP, X86_ADD_REG_CODE, X86_ENDBR64_B0, X86_ENDBR64_B1, X86_ENDBR64_B2,
+    X86_ENDBR64_B3, X86_ENTER_OP, X86_LEAVE_OP, X86_MAX_INSN_LEN, X86_MODRM_MOD_DIRECT,
+    X86_MODRM_MOD_DISP32, X86_MODRM_MOD_DISP8, X86_MODRM_MOD_MASK, X86_MODRM_REG_MASK,
+    X86_MODRM_RM_DISP32_ONLY, X86_MODRM_RM_MASK, X86_MODRM_RM_SIB, X86_MOV_RBP_RSP_B0,
+    X86_MOV_RBP_RSP_B1, X86_MOV_RBP_RSP_B2, X86_NOP_OPCODE, X86_OPCODE_CALL_REL32,
+    X86_OPCODE_GRP1_IMM32, X86_OPCODE_GRP1_IMM8, X86_OPCODE_GRP3_NOT_NEG,
     X86_OPCODE_GRP5_JMP_CALL, X86_OPCODE_INT3, X86_OPCODE_JCC_REL32_BASE,
     X86_OPCODE_JCC_REL32_COUNT, X86_OPCODE_JCC_REL8_BASE, X86_OPCODE_JCC_REL8_COUNT,
     X86_OPCODE_JMP_REL32, X86_OPCODE_JMP_REL8, X86_OPCODE_LEA, X86_OPCODE_MOV_RM_R,
-    X86_OPCODE_MOV_R_RM, X86_OPCODE_POP_REG_MAX, X86_OPCODE_POP_REG_MIN, X86_OPCODE_PUSH_REG_MAX,
-    X86_OPCODE_PUSH_REG_MIN, X86_OPCODE_TWO_BYTE_ESCAPE, X86_PREFIX_ADDRESS_SIZE,
-    X86_PREFIX_CS_OVERRIDE, X86_PREFIX_DS_OVERRIDE, X86_PREFIX_ES_OVERRIDE, X86_PREFIX_FS_OVERRIDE,
-    X86_PREFIX_GS_OVERRIDE, X86_PREFIX_LOCK, X86_PREFIX_OPERAND_SIZE, X86_PREFIX_REP,
-    X86_PREFIX_REPNE, X86_PREFIX_SS_OVERRIDE, X86_PUSH_RBP, X86_REG_RSP_CODE, X86_RET_FAR_IMM16_OP,
-    X86_RET_FAR_OP, X86_RET_IMM16_OP, X86_RET_OP, X86_REX_MAX, X86_REX_MIN, X86_REX_W,
-    X86_RSP_ADD_MODRM, X86_RSP_MODRM, X86_SIB_BASE_DISP32_ONLY, X86_SUB_IMM32_OP, X86_SUB_IMM8_OP,
-    X86_SUB_REG_CODE,
+    X86_OPCODE_MOV_R_RM, X86_OPCODE_POP_REG_MAX, X86_OPCODE_POP_REG_MIN,
+    X86_OPCODE_PUSH_REG_MAX, X86_OPCODE_PUSH_REG_MIN, X86_OPCODE_TWO_BYTE_ESCAPE,
+    X86_PREFIX_ADDRESS_SIZE, X86_PREFIX_CS_OVERRIDE, X86_PREFIX_DS_OVERRIDE,
+    X86_PREFIX_ES_OVERRIDE, X86_PREFIX_FS_OVERRIDE, X86_PREFIX_GS_OVERRIDE, X86_PREFIX_LOCK,
+    X86_PREFIX_OPERAND_SIZE, X86_PREFIX_REP, X86_PREFIX_REPNE, X86_PREFIX_SS_OVERRIDE,
+    X86_PUSH_RBP, X86_REG_RSP_CODE, X86_RET_FAR_IMM16_OP, X86_RET_FAR_OP, X86_RET_IMM16_OP,
+    X86_RET_OP, X86_REX_MAX, X86_REX_MIN, X86_REX_W, X86_RSP_ADD_MODRM, X86_RSP_MODRM,
+    X86_SIB_BASE_DISP32_ONLY, X86_SUB_IMM32_OP, X86_SUB_IMM8_OP, X86_SUB_REG_CODE,
 };
 use std::collections::HashSet;
 
 pub const STACK_FRAME_4KB_BOUND: usize = BUFFER_CAPACITY_BYTES;
 
-pub const X86_MODRM_REG_SHIFT: u32 = 3;
-pub const X86_DISP32_BYTES: usize = 4;
-pub const X86_IMM16_BYTES: usize = 2;
-pub const X86_IMM32_BYTES: usize = 4;
-pub const X86_IMM64_BYTES: usize = 8;
-pub const X86_REL32_BYTES: usize = 4;
-pub const X86_ENTER_OPERANDS_BYTES: usize = 3;
-pub const X86_REX_W_FLAG: u8 = 0x08;
-pub const X86_PROLOGUE_SEQ_BYTES: usize = 3;
-pub const X86_PROLOGUE_RSP_OFFSET: usize = 2;
-pub const X86_ENDBR64_BYTES: usize = 4;
+pub const X86_MODRM_REG_SHIFT: u32 = STEP_TRIO as u32;
+pub const X86_DISP32_BYTES: usize = std::mem::size_of::<u32>();
+pub const X86_IMM16_BYTES: usize = std::mem::size_of::<u16>();
+pub const X86_IMM32_BYTES: usize = std::mem::size_of::<u32>();
+pub const X86_IMM64_BYTES: usize = std::mem::size_of::<u64>();
+pub const X86_REL32_BYTES: usize = std::mem::size_of::<u32>();
+pub const X86_ENTER_OPERANDS_BYTES: usize = STEP_TRIO;
+pub const X86_REX_W_FLAG: u8 = 1 << (STEP_TRIO as u8);
+pub const X86_PROLOGUE_SEQ_BYTES: usize = STEP_TRIO;
+pub const X86_PROLOGUE_RSP_OFFSET: usize = BISECTION_DIVISOR;
+pub const X86_ENDBR64_BYTES: usize = std::mem::size_of::<u32>();
 
 pub const X86_OPCODE_MOV_R_IMM_MIN: u8 = 0xb8;
 pub const X86_OPCODE_MOV_R_IMM_MAX: u8 = 0xbf;
@@ -106,73 +108,76 @@ pub const AARCH64_TBZ_TBNZ_MASK: u32 = 0x7e000000;
 pub const AARCH64_TBZ_MATCH: u32 = 0x36000000;
 pub const AARCH64_TBNZ_MATCH: u32 = 0x37000000;
 pub const AARCH64_TBZ_IMM14_MASK: u32 = 0x3fff;
-pub const AARCH64_TBZ_IMM14_SHIFT: u32 = 5;
+pub const AARCH64_TBZ_IMM14_SHIFT: u32 = VSIX_MAX_SIZE_MB as u32;
 pub const AARCH64_TBZ_IMM14_SIGN_BIT: u32 = 0x2000;
-pub const AARCH64_TBZ_IMM14_SIGN_EXTEND: i32 = 0x4000;
+pub const AARCH64_TBZ_IMM14_SIGN_EXTEND: i32 =
+    1 << (((DAYS_PER_WEEK as u32) * (BISECTION_DIVISOR as u32)) as usize);
 
-pub const RISCV_C_ADDI16SP_STEP: usize = 16;
+pub const RISCV_C_ADDI16SP_STEP: usize = 1 << std::mem::size_of::<u32>();
 pub const RISCV_JALR_ALT_INSN: u32 = 0x000080e7;
 pub const RISCV_JAL_IMM10_1_MASK: u32 = 0x3ff;
 pub const RISCV_JAL_IMM19_12_MASK: u32 = 0xff;
 pub const RISCV_JAL_SIGN_BIT: u32 = 0x100000;
-pub const RISCV_JAL_SIGN_EXTEND: i32 = 0x200000;
+pub const RISCV_JAL_SIGN_EXTEND: i32 =
+    1 << (((BISECTION_DIVISOR * BASE_DECIMAL) + BYTE_ONE) as u32);
 pub const RISCV_BRANCH_IMM10_5_MASK: u32 = 0x3f;
 pub const RISCV_BRANCH_IMM4_1_MASK: u32 = 0x0f;
 pub const RISCV_BRANCH_SIGN_BIT: u32 = 0x1000;
-pub const RISCV_BRANCH_SIGN_EXTEND: i32 = 0x2000;
+pub const RISCV_BRANCH_SIGN_EXTEND: i32 = 1 << ((BASE_DECIMAL + STEP_TRIO) as u32);
 pub const RISCV_C_J_SIGN_BIT: u32 = 0x800;
-pub const RISCV_C_J_SIGN_EXTEND: i32 = 0x1000;
+pub const RISCV_C_J_SIGN_EXTEND: i32 = 1 << ((BASE_DECIMAL + BISECTION_DIVISOR) as u32);
 pub const RISCV_C_B_SIGN_BIT: u32 = 0x100;
-pub const RISCV_C_B_SIGN_EXTEND: i32 = 0x200;
+pub const RISCV_C_B_SIGN_EXTEND: i32 = 1 << ((std::mem::size_of::<u64>() + BYTE_ONE) as u32);
 
-pub const RISCV_JAL_IMM20_SRC_SHIFT: u32 = 31;
-pub const RISCV_JAL_IMM10_1_SRC_SHIFT: u32 = 21;
-pub const RISCV_JAL_IMM11_SRC_SHIFT: u32 = 20;
-pub const RISCV_JAL_IMM19_12_SRC_SHIFT: u32 = 12;
-pub const RISCV_JAL_IMM20_DST_SHIFT: u32 = 20;
-pub const RISCV_JAL_IMM19_12_DST_SHIFT: u32 = 12;
-pub const RISCV_JAL_IMM11_DST_SHIFT: u32 = 11;
-pub const RISCV_JAL_IMM10_1_DST_SHIFT: u32 = 1;
+pub const RISCV_JAL_IMM20_SRC_SHIFT: u32 = ((1 << VSIX_MAX_SIZE_MB) - BYTE_ONE) as u32;
+pub const RISCV_JAL_IMM10_1_SRC_SHIFT: u32 =
+    ((BISECTION_DIVISOR * BASE_DECIMAL) + BYTE_ONE) as u32;
+pub const RISCV_JAL_IMM11_SRC_SHIFT: u32 = (BISECTION_DIVISOR * BASE_DECIMAL) as u32;
+pub const RISCV_JAL_IMM19_12_SRC_SHIFT: u32 = (BASE_DECIMAL + BISECTION_DIVISOR) as u32;
+pub const RISCV_JAL_IMM20_DST_SHIFT: u32 = (BISECTION_DIVISOR * BASE_DECIMAL) as u32;
+pub const RISCV_JAL_IMM19_12_DST_SHIFT: u32 = (BASE_DECIMAL + BISECTION_DIVISOR) as u32;
+pub const RISCV_JAL_IMM11_DST_SHIFT: u32 = (BASE_DECIMAL + BYTE_ONE) as u32;
+pub const RISCV_JAL_IMM10_1_DST_SHIFT: u32 = BYTE_ONE as u32;
 
-pub const RISCV_BRANCH_IMM12_SRC_SHIFT: u32 = 31;
-pub const RISCV_BRANCH_IMM10_5_SRC_SHIFT: u32 = 25;
-pub const RISCV_BRANCH_IMM4_1_SRC_SHIFT: u32 = 8;
-pub const RISCV_BRANCH_IMM11_SRC_SHIFT: u32 = 7;
-pub const RISCV_BRANCH_IMM12_DST_SHIFT: u32 = 12;
-pub const RISCV_BRANCH_IMM11_DST_SHIFT: u32 = 11;
-pub const RISCV_BRANCH_IMM10_5_DST_SHIFT: u32 = 5;
-pub const RISCV_BRANCH_IMM4_1_DST_SHIFT: u32 = 1;
+pub const RISCV_BRANCH_IMM12_SRC_SHIFT: u32 = ((1 << VSIX_MAX_SIZE_MB) - BYTE_ONE) as u32;
+pub const RISCV_BRANCH_IMM10_5_SRC_SHIFT: u32 = (VSIX_MAX_SIZE_MB * VSIX_MAX_SIZE_MB) as u32;
+pub const RISCV_BRANCH_IMM4_1_SRC_SHIFT: u32 = std::mem::size_of::<u64>() as u32;
+pub const RISCV_BRANCH_IMM11_SRC_SHIFT: u32 = DAYS_PER_WEEK as u32;
+pub const RISCV_BRANCH_IMM12_DST_SHIFT: u32 = (BASE_DECIMAL + BISECTION_DIVISOR) as u32;
+pub const RISCV_BRANCH_IMM11_DST_SHIFT: u32 = (BASE_DECIMAL + BYTE_ONE) as u32;
+pub const RISCV_BRANCH_IMM10_5_DST_SHIFT: u32 = VSIX_MAX_SIZE_MB as u32;
+pub const RISCV_BRANCH_IMM4_1_DST_SHIFT: u32 = BYTE_ONE as u32;
 
 pub const RISCV_C_J_MASK_2BIT: u16 = 0x03;
 pub const RISCV_C_J_MASK_3BIT: u16 = 0x07;
-pub const RISCV_C_J_SRC_IMM11_SHIFT: u16 = 12;
-pub const RISCV_C_J_SRC_IMM4_SHIFT: u16 = 11;
-pub const RISCV_C_J_SRC_IMM9_8_SHIFT: u16 = 9;
-pub const RISCV_C_J_SRC_IMM10_SHIFT: u16 = 8;
-pub const RISCV_C_J_SRC_IMM6_SHIFT: u16 = 7;
-pub const RISCV_C_J_SRC_IMM7_SHIFT: u16 = 6;
-pub const RISCV_C_J_SRC_IMM3_1_SHIFT: u16 = 3;
-pub const RISCV_C_J_SRC_IMM5_SHIFT: u16 = 2;
-pub const RISCV_C_J_DST_IMM11_SHIFT: u32 = 11;
-pub const RISCV_C_J_DST_IMM10_SHIFT: u32 = 10;
-pub const RISCV_C_J_DST_IMM9_8_SHIFT: u32 = 8;
-pub const RISCV_C_J_DST_IMM7_SHIFT: u32 = 7;
-pub const RISCV_C_J_DST_IMM6_SHIFT: u32 = 6;
-pub const RISCV_C_J_DST_IMM5_SHIFT: u32 = 5;
-pub const RISCV_C_J_DST_IMM4_SHIFT: u32 = 4;
-pub const RISCV_C_J_DST_IMM3_1_SHIFT: u32 = 1;
+pub const RISCV_C_J_SRC_IMM11_SHIFT: u16 = (BASE_DECIMAL + BISECTION_DIVISOR) as u16;
+pub const RISCV_C_J_SRC_IMM4_SHIFT: u16 = (BASE_DECIMAL + BYTE_ONE) as u16;
+pub const RISCV_C_J_SRC_IMM9_8_SHIFT: u16 = (std::mem::size_of::<u64>() + BYTE_ONE) as u16;
+pub const RISCV_C_J_SRC_IMM10_SHIFT: u16 = std::mem::size_of::<u64>() as u16;
+pub const RISCV_C_J_SRC_IMM6_SHIFT: u16 = DAYS_PER_WEEK as u16;
+pub const RISCV_C_J_SRC_IMM7_SHIFT: u16 = ((DAYS_PER_WEEK as usize) - BYTE_ONE) as u16;
+pub const RISCV_C_J_SRC_IMM3_1_SHIFT: u16 = STEP_TRIO as u16;
+pub const RISCV_C_J_SRC_IMM5_SHIFT: u16 = BISECTION_DIVISOR as u16;
+pub const RISCV_C_J_DST_IMM11_SHIFT: u32 = (BASE_DECIMAL + BYTE_ONE) as u32;
+pub const RISCV_C_J_DST_IMM10_SHIFT: u32 = BASE_DECIMAL as u32;
+pub const RISCV_C_J_DST_IMM9_8_SHIFT: u32 = std::mem::size_of::<u64>() as u32;
+pub const RISCV_C_J_DST_IMM7_SHIFT: u32 = DAYS_PER_WEEK as u32;
+pub const RISCV_C_J_DST_IMM6_SHIFT: u32 = ((DAYS_PER_WEEK as usize) - BYTE_ONE) as u32;
+pub const RISCV_C_J_DST_IMM5_SHIFT: u32 = VSIX_MAX_SIZE_MB as u32;
+pub const RISCV_C_J_DST_IMM4_SHIFT: u32 = std::mem::size_of::<u32>() as u32;
+pub const RISCV_C_J_DST_IMM3_1_SHIFT: u32 = BYTE_ONE as u32;
 
 pub const RISCV_C_B_MASK_2BIT: u16 = 0x03;
-pub const RISCV_C_B_SRC_IMM8_SHIFT: u16 = 12;
-pub const RISCV_C_B_SRC_IMM4_3_SHIFT: u16 = 10;
-pub const RISCV_C_B_SRC_IMM7_6_SHIFT: u16 = 5;
-pub const RISCV_C_B_SRC_IMM2_1_SHIFT: u16 = 3;
-pub const RISCV_C_B_SRC_IMM5_SHIFT: u16 = 2;
-pub const RISCV_C_B_DST_IMM8_SHIFT: u32 = 8;
-pub const RISCV_C_B_DST_IMM7_6_SHIFT: u32 = 6;
-pub const RISCV_C_B_DST_IMM5_SHIFT: u32 = 5;
-pub const RISCV_C_B_DST_IMM4_3_SHIFT: u32 = 3;
-pub const RISCV_C_B_DST_IMM2_1_SHIFT: u32 = 1;
+pub const RISCV_C_B_SRC_IMM8_SHIFT: u16 = (BASE_DECIMAL + BISECTION_DIVISOR) as u16;
+pub const RISCV_C_B_SRC_IMM4_3_SHIFT: u16 = BASE_DECIMAL as u16;
+pub const RISCV_C_B_SRC_IMM7_6_SHIFT: u16 = VSIX_MAX_SIZE_MB as u16;
+pub const RISCV_C_B_SRC_IMM2_1_SHIFT: u16 = STEP_TRIO as u16;
+pub const RISCV_C_B_SRC_IMM5_SHIFT: u16 = BISECTION_DIVISOR as u16;
+pub const RISCV_C_B_DST_IMM8_SHIFT: u32 = std::mem::size_of::<u64>() as u32;
+pub const RISCV_C_B_DST_IMM7_6_SHIFT: u32 = ((DAYS_PER_WEEK as usize) - BYTE_ONE) as u32;
+pub const RISCV_C_B_DST_IMM5_SHIFT: u32 = VSIX_MAX_SIZE_MB as u32;
+pub const RISCV_C_B_DST_IMM4_3_SHIFT: u32 = STEP_TRIO as u32;
+pub const RISCV_C_B_DST_IMM2_1_SHIFT: u32 = BYTE_ONE as u32;
 
 #[allow(dead_code)]
 fn decode_modrm_and_displacements(bytecode: &[u8], pos: &mut usize) -> Option<(u8, u8, u8)> {
@@ -231,14 +236,24 @@ pub struct X86Instruction {
     pub is_banned: bool,
 }
 
+pub fn scan_banned_instructions(bytecode: &[u8]) -> Result<(), VerifyError> {
+    X86_64Verifier::scan_banned_instructions(bytecode)
+}
+
 impl X86_64Verifier {
     pub fn scan_banned_instructions(bytecode: &[u8]) -> Result<(), VerifyError> {
+        if bytecode.is_empty() {
+            return Err(VerifyError::CfiViolation(
+                "Empty bytecode cannot be verified".to_string(),
+            ));
+        }
         let mut idx = 0;
         while idx < bytecode.len() {
             let b = bytecode[idx];
             if idx + 1 < bytecode.len() {
                 let next = bytecode[idx + 1];
-                if (b == X86_OPCODE_TWO_BYTE_ESCAPE && (next == X86_OPCODE_SYSCALL || next == X86_OPCODE_SYSENTER))
+                if (b == X86_OPCODE_TWO_BYTE_ESCAPE
+                    && (next == X86_OPCODE_SYSCALL || next == X86_OPCODE_SYSENTER))
                     || (b == X86_OPCODE_INT_N && next == X86_INT_VECTOR_COMPAT_LINUX)
                 {
                     return Err(VerifyError::CfiViolation(
@@ -689,6 +704,7 @@ impl IsaVerifier for X86_64Verifier {
 
         let instructions = Self::decode_all_instructions(bytecode);
         let mut current_allocated = 0;
+        let bound = max_bytes.min(MAX_STACK_FRAME_BYTES);
 
         for insn in instructions {
             if insn.is_banned {
@@ -704,8 +720,8 @@ impl IsaVerifier for X86_64Verifier {
             if insn.is_stack_sub {
                 if let Some(imm) = insn.imm {
                     current_allocated += imm as usize;
-                    if current_allocated > max_bytes {
-                        return Err(VerifyError::StackOverflow(current_allocated, max_bytes));
+                    if current_allocated > bound {
+                        return Err(VerifyError::StackOverflow(current_allocated, bound));
                     }
                 }
             } else if insn.is_stack_add {
@@ -789,8 +805,11 @@ impl IsaVerifier for AArch64Verifier {
             ));
         }
 
+        scan_banned_instructions(bytecode)?;
+
         let mut current_allocated = 0;
         let mut j = 0;
+        let bound = max_bytes.min(MAX_STACK_FRAME_BYTES);
 
         while j + AARCH64_INSN_BYTES <= bytecode.len() {
             let insn = u32::from_le_bytes(bytecode[j..j + AARCH64_INSN_BYTES].try_into().unwrap());
@@ -812,8 +831,8 @@ impl IsaVerifier for AArch64Verifier {
                 };
                 let allocated = (imm12 << shift) as usize;
                 current_allocated += allocated;
-                if current_allocated > max_bytes {
-                    return Err(VerifyError::StackOverflow(current_allocated, max_bytes));
+                if current_allocated > bound {
+                    return Err(VerifyError::StackOverflow(current_allocated, bound));
                 }
             } else if (insn & AARCH64_STP_PRE_MASK) == AARCH64_STP_PRE_MATCH {
                 let raw_imm7 = (insn >> AARCH64_STP_IMM7_SHIFT) & AARCH64_STP_IMM7_MASK;
@@ -821,8 +840,8 @@ impl IsaVerifier for AArch64Verifier {
                     let signed_imm = (raw_imm7 as i32) - AARCH64_STP_SIGN_EXTEND;
                     let allocated = ((-signed_imm) as usize) * AARCH64_STP_SCALE_BYTES;
                     current_allocated += allocated;
-                    if current_allocated > max_bytes {
-                        return Err(VerifyError::StackOverflow(current_allocated, max_bytes));
+                    if current_allocated > bound {
+                        return Err(VerifyError::StackOverflow(current_allocated, bound));
                     }
                 }
             } else if (insn & AARCH64_ADD_SP_MASK) == AARCH64_ADD_SP_MATCH {
@@ -854,6 +873,8 @@ impl IsaVerifier for AArch64Verifier {
                 "Empty bytecode cannot be verified".to_string(),
             ));
         }
+
+        scan_banned_instructions(bytecode)?;
 
         if !bytecode.len().is_multiple_of(AARCH64_INSN_BYTES) {
             return Err(VerifyError::CfiViolation(
@@ -959,8 +980,11 @@ impl IsaVerifier for RiscV64Verifier {
             ));
         }
 
+        scan_banned_instructions(bytecode)?;
+
         let mut current_allocated = 0;
         let mut idx = 0;
+        let bound = max_bytes.min(MAX_STACK_FRAME_BYTES);
 
         while idx + RISCV_COMPRESSED_INSN_BYTES <= bytecode.len() {
             let is_32bit = (bytecode[idx] & RISCV_INSN_LEN_MASK) == RISCV_INSN_32BIT_MARKER;
@@ -979,11 +1003,8 @@ impl IsaVerifier for RiscV64Verifier {
                             let signed_imm = (raw_imm12 as i32) - RISCV_ADDI_SIGN_EXTEND;
                             let allocated = (-signed_imm) as usize;
                             current_allocated += allocated;
-                            if current_allocated > max_bytes {
-                                return Err(VerifyError::StackOverflow(
-                                    current_allocated,
-                                    max_bytes,
-                                ));
+                            if current_allocated > bound {
+                                return Err(VerifyError::StackOverflow(current_allocated, bound));
                             }
                         } else {
                             let deallocated = raw_imm12 as usize;
@@ -1007,8 +1028,8 @@ impl IsaVerifier for RiscV64Verifier {
                     if (c_insn & RISCV_C_ADDI16SP_SIGN_BIT) != 0 {
                         let allocated = RISCV_C_ADDI16SP_STEP;
                         current_allocated += allocated;
-                        if current_allocated > max_bytes {
-                            return Err(VerifyError::StackOverflow(current_allocated, max_bytes));
+                        if current_allocated > bound {
+                            return Err(VerifyError::StackOverflow(current_allocated, bound));
                         }
                     } else {
                         let deallocated = RISCV_C_ADDI16SP_STEP;
@@ -1029,6 +1050,8 @@ impl IsaVerifier for RiscV64Verifier {
                 "Empty bytecode cannot be verified".to_string(),
             ));
         }
+
+        scan_banned_instructions(bytecode)?;
 
         if !bytecode.len().is_multiple_of(RISCV_COMPRESSED_INSN_BYTES) {
             return Err(VerifyError::CfiViolation(
@@ -1206,6 +1229,12 @@ pub fn get_verifier(isa: TargetIsa) -> &'static dyn IsaVerifier {
 }
 
 pub fn verify_cfi_for_isa(bytecode: &[u8], isa: TargetIsa) -> Result<(), VerifyError> {
+    if bytecode.is_empty() {
+        return Err(VerifyError::CfiViolation(
+            "Empty bytecode cannot be verified".to_string(),
+        ));
+    }
+    scan_banned_instructions(bytecode)?;
     get_verifier(isa).verify_cfi(bytecode)
 }
 
@@ -1214,6 +1243,12 @@ pub fn verify_stack_frame_bound_for_isa(
     max_bytes: usize,
     isa: TargetIsa,
 ) -> Result<(), VerifyError> {
+    if bytecode.is_empty() {
+        return Err(VerifyError::CfiViolation(
+            "Empty bytecode cannot be verified".to_string(),
+        ));
+    }
+    scan_banned_instructions(bytecode)?;
     get_verifier(isa).verify_stack_frame(bytecode, max_bytes)
 }
 
@@ -1332,6 +1367,7 @@ pub fn verify_stack_frame_bound(bytecode: &[u8], max_bytes: usize) -> Result<(),
             "Empty bytecode cannot be verified".to_string(),
         ));
     }
+    scan_banned_instructions(bytecode)?;
     let isa = detect_isa(bytecode).unwrap_or_else(TargetIsa::native);
     get_verifier(isa).verify_stack_frame(bytecode, max_bytes)
 }
@@ -1342,6 +1378,7 @@ pub fn verify_cfi_integrity(bytecode: &[u8]) -> Result<(), VerifyError> {
             "Empty bytecode cannot be verified".to_string(),
         ));
     }
+    scan_banned_instructions(bytecode)?;
     let isa = detect_isa(bytecode).unwrap_or_else(TargetIsa::native);
     get_verifier(isa).verify_cfi(bytecode)
 }

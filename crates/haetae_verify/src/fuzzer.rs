@@ -1,34 +1,26 @@
 use crate::tcc_engine::{CompiledCode, TccEngine, VerifyError};
 pub use haetae_core::config::{
-    BYTE_MAX_VALUE, BYTE_VALUES_COUNT, DEFAULT_FUZZ_ITERATIONS, FUZZ_BOUNDARY_POWER_TWO_COUNT,
-    FUZZ_DEFAULT_MUTATION_RATE, FUZZ_MAX_ARG_COUNT, FUZZ_MUTATION_MASK_1, FUZZ_MUTATION_MASK_2,
-    FUZZ_MUTATION_MASK_3, FUZZ_MUTATION_MASK_4, FUZZ_MUTATION_MASK_5, MILLIS_PER_SEC, POSIX_SIGFPE,
-    POSIX_SIGSEGV, U16_MAX_VALUE, U16_VALUES_COUNT, XORSHIFT_DEFAULT_SEED, XORSHIFT_SHIFT_A,
-    XORSHIFT_SHIFT_B, XORSHIFT_SHIFT_C,
+    BYTE_MAX_VALUE, BYTE_VALUES_COUNT, DEFAULT_FUZZ_ITERATIONS, FUZZ_ARG_RANDOM_CHANCE,
+    FUZZ_BOUNDARY_POWER_TWO_COUNT, FUZZ_DEFAULT_MUTATION_RATE, FUZZ_MASKS_COUNT,
+    FUZZ_MAX_ARG_COUNT, FUZZ_MODE_ADD_ONE, FUZZ_MODE_MASK, FUZZ_MODE_RANDOM,
+    FUZZ_MODE_SMALL_OFFSET, FUZZ_MUTATION_MASK_1, FUZZ_MUTATION_MASK_2, FUZZ_MUTATION_MASK_3,
+    FUZZ_MUTATION_MASK_4, FUZZ_MUTATION_MASK_5, FUZZ_MUTATION_MODES_COUNT,
+    FUZZ_OFFSET_RANGE_BIAS, FUZZ_OFFSET_RANGE_SPAN, MILLIS_PER_SEC, POSIX_SIGFPE, POSIX_SIGSEGV,
+    U16_MAX_VALUE, U16_VALUES_COUNT, XORSHIFT_DEFAULT_SEED, XORSHIFT_SHIFT_A, XORSHIFT_SHIFT_B,
+    XORSHIFT_SHIFT_C,
 };
 use std::sync::atomic::{AtomicBool, AtomicI32};
 
 pub static CRASH_DETECTED: AtomicBool = AtomicBool::new(false);
 pub static LAST_SIGNAL: AtomicI32 = AtomicI32::new(0);
 
-pub const FUZZ_MUTATION_MODES_COUNT: usize = 4;
-pub const FUZZ_MODE_RANDOM: usize = 0;
-pub const FUZZ_MODE_MASK: usize = 1;
-pub const FUZZ_MODE_ADD_ONE: usize = 2;
-pub const FUZZ_MODE_SMALL_OFFSET: usize = 3;
-
-pub const FUZZ_MASKS: [u64; 5] = [
+pub const FUZZ_MASKS: [u64; FUZZ_MASKS_COUNT] = [
     FUZZ_MUTATION_MASK_1,
     FUZZ_MUTATION_MASK_2,
     FUZZ_MUTATION_MASK_3,
     FUZZ_MUTATION_MASK_4,
     FUZZ_MUTATION_MASK_5,
 ];
-pub const FUZZ_MASKS_COUNT: usize = FUZZ_MASKS.len();
-
-pub const FUZZ_OFFSET_RANGE_BIAS: usize = 128;
-pub const FUZZ_OFFSET_RANGE_SPAN: usize = 256;
-pub const FUZZ_ARG_RANDOM_CHANCE: usize = 4;
 
 #[cfg(all(target_os = "linux", not(miri)))]
 const MMAP_ANONYMOUS_FD: libc::c_int = -1;
@@ -174,8 +166,7 @@ impl FuzzerEngine {
                 let idx = prng.next_range(boundaries.len());
                 boundaries[idx].wrapping_add(1)
             } else {
-                (prng.next_range(FUZZ_OFFSET_RANGE_SPAN) as i64)
-                    - (FUZZ_OFFSET_RANGE_BIAS as i64)
+                (prng.next_range(FUZZ_OFFSET_RANGE_SPAN) as i64) - (FUZZ_OFFSET_RANGE_BIAS as i64)
             }
         }
     }

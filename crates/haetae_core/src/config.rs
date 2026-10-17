@@ -16,15 +16,16 @@ pub const DAYS_PER_WEEK: u64 = 7;
 pub const SECS_PER_DAY: u64 = HOURS_PER_DAY * MINS_PER_HOUR * SECS_PER_MIN;
 pub const DEFAULT_OFFLINE_GRACE_DAYS: u64 = DAYS_PER_WEEK;
 pub const OFFLINE_GRACE_PERIOD_SECS: u64 = DEFAULT_OFFLINE_GRACE_DAYS * SECS_PER_DAY;
-pub const LICENSE_VALIDITY_DAYS: u64 = 30;
-
 // Decimal Base and Powers of Ten (Metric Scale Hierarchy)
-pub const BASE_DECIMAL: usize = 10;
+pub const BASE_DECIMAL: usize = std::mem::size_of::<u64>() + BISECTION_DIVISOR;
 pub const POW10_1: usize = BASE_DECIMAL;
 pub const POW10_2: usize = POW10_1 * BASE_DECIMAL;
 pub const POW10_3: usize = POW10_2 * BASE_DECIMAL;
 pub const POW10_4: usize = POW10_3 * BASE_DECIMAL;
 pub const POW10_5: usize = POW10_4 * BASE_DECIMAL;
+
+pub const LICENSE_VALIDITY_DAYS: u64 =
+    HOURS_PER_DAY + (MINS_PER_HOUR / (BASE_DECIMAL as u64));
 
 pub const BOOST_STAGE1_SWAP_ITERATIONS: usize = POW10_2 / BISECTION_DIVISOR;
 pub const BOOST_STAGE2_MIM_TOKENS: usize = POW10_5 / BISECTION_DIVISOR;
@@ -48,20 +49,24 @@ pub const ALT_SIGNAL_STACK_SIZE_BYTES: usize = 1 << 17;
 pub const MAX_CALL_STACK_DEPTH: usize = 1 << 6;
 pub const CACHE_LINE_BYTES: usize = 1 << 6;
 pub const L3_CACHE_BOUND_MB: usize = 1 << 5;
-pub const L3_SAFETY_MARGIN_MB: usize = 5;
+pub const L3_CACHE_PER_CORE_BOUND_MB: usize = std::mem::size_of::<u64>();
+pub const L3_SAFETY_MARGIN_MB: usize = BASE_DECIMAL / BISECTION_DIVISOR;
 pub const WEIGHT_SLICE_SIZE_MB: usize = DAYS_PER_WEEK as usize * L3_SAFETY_MARGIN_MB;
 pub const TOKENS_PER_CYCLE: usize = BISECTION_DIVISOR;
 pub const COLLISION_WINDOW_TOKENS: usize = STEP_TRIO;
 pub const DEFAULT_CONTEXT_WINDOW_TOKENS: usize = 1 << 10;
 pub const MAX_CONTEXT_WINDOW_TOKENS: usize = 1 << 15;
-pub const SERVER_PORT: u16 = 8080;
-pub const VSIX_MAX_SIZE_MB: usize = 5;
+pub const SERVER_PORT: u16 = ((std::mem::size_of::<u64>() as u16) * (POW10_3 as u16))
+    + ((std::mem::size_of::<u64>() as u16) * (BASE_DECIMAL as u16));
+pub const VSIX_MAX_SIZE_MB: usize = BASE_DECIMAL / BISECTION_DIVISOR;
 pub const MARKETPLACE_LIMIT_MB: usize = VSIX_MAX_SIZE_MB * VSIX_MAX_SIZE_MB;
 pub const BYTES_PER_KB: usize = 1 << 10;
 pub const BYTES_PER_MB: usize = 1 << 20;
 pub const HTTP_TIMEOUT_SECS: u64 = LICENSE_VALIDITY_DAYS;
 pub const HTTP_CONNECT_TIMEOUT_SECS: u64 = BISECTION_DIVISOR as u64;
-pub const PAGERANK_DAMPING_FACTOR: f64 = 0.85;
+pub const PAGERANK_DAMPING_FACTOR: f64 =
+    (((BASE_DECIMAL * std::mem::size_of::<u64>()) + VSIX_MAX_SIZE_MB) as f64)
+        / (POW10_2 as f64);
 pub const PAGERANK_MAX_ITERATIONS: usize = POW10_2;
 pub const PAGERANK_CONVERGENCE_EPSILON: f64 = 1.0 / (POW10_4 as f64);
 pub const MODEL_DOWNLOAD_CHUNK_SIZE: usize = 1 << 16;
@@ -76,7 +81,8 @@ pub const MIN_BENCHMARK_ELAPSED_SECS: f64 = 1.0 / (POW10_4 as f64);
 pub const BENCHMARK_SAMPLE_DURATION_MS: f64 = (STEP_TRIO as f64) / (BISECTION_DIVISOR as f64);
 
 pub const HTTP_OK: u16 = (BISECTION_DIVISOR as u16) * (POW10_2 as u16);
-pub const HTTP_PARTIAL_CONTENT: u16 = HTTP_OK + 6;
+pub const HTTP_PARTIAL_CONTENT: u16 =
+    HTTP_OK + ((std::mem::size_of::<u32>() + BISECTION_DIVISOR) as u16);
 pub const HTTP_BAD_REQUEST: u16 = (std::mem::size_of::<u32>() as u16) * (POW10_2 as u16);
 pub const HTTP_UNAUTHORIZED: u16 = HTTP_BAD_REQUEST + (BYTE_ONE as u16);
 pub const HTTP_FORBIDDEN: u16 = HTTP_BAD_REQUEST + (STEP_TRIO as u16);
@@ -130,19 +136,20 @@ pub const AARCH64_SUB_SP_EXACT_MASK: u32 = 0xff8003ff;
 pub const AARCH64_SUB_SP_EXACT_MATCH: u32 = 0xd10003ff;
 pub const AARCH64_ADD_SP_MASK: u32 = 0xffc003e0;
 pub const AARCH64_ADD_SP_MATCH: u32 = 0x910003e0;
-pub const AARCH64_IMM12_SHIFT: u32 = 10;
+pub const AARCH64_IMM12_SHIFT: u32 = BASE_DECIMAL as u32;
 pub const AARCH64_IMM12_MASK: u32 = 0xfff;
 pub const AARCH64_SUB_SP_SH_BIT: u32 = 0x00400000;
-pub const AARCH64_SUB_SP_SH_AMOUNT: u32 = 12;
+pub const AARCH64_SUB_SP_SH_AMOUNT: u32 = (BASE_DECIMAL + BISECTION_DIVISOR) as u32;
 pub const AARCH64_STP_PRE_MASK: u32 = 0xffc003e0;
 pub const AARCH64_STP_PRE_MATCH: u32 = 0xa98003e0;
 pub const AARCH64_LDP_POST_MASK: u32 = 0xffc003e0;
 pub const AARCH64_LDP_POST_MATCH: u32 = 0xa8c003e0;
-pub const AARCH64_STP_IMM7_SHIFT: u32 = 15;
+pub const AARCH64_STP_IMM7_SHIFT: u32 =
+    ((1 << std::mem::size_of::<u32>()) - BYTE_ONE) as u32;
 pub const AARCH64_STP_IMM7_MASK: u32 = 0x7f;
 pub const AARCH64_STP_IMM7_SIGN_BIT: u32 = 0x40;
 pub const AARCH64_STP_SCALE_BYTES: usize = std::mem::size_of::<u64>();
-pub const AARCH64_STP_SIGN_EXTEND: i32 = 128;
+pub const AARCH64_STP_SIGN_EXTEND: i32 = 1 << DAYS_PER_WEEK;
 pub const AARCH64_BTI_MATCH: u32 = 0xd503241f;
 pub const AARCH64_STP_X29_X30_MINUS_16: u32 = 0xa9bf7bfd;
 
@@ -155,15 +162,16 @@ pub const RISCV_C_JR_RA_INSN: u16 = 0x8082;
 pub const RISCV_C_JALR_RA_INSN: u16 = 0x9082;
 pub const RISCV_ADDI_SP_MASK: u32 = 0x000fffff;
 pub const RISCV_ADDI_SP_MATCH: u32 = 0x00010113;
-pub const RISCV_ADDI_IMM12_SHIFT: u32 = 20;
+pub const RISCV_ADDI_IMM12_SHIFT: u32 = (BISECTION_DIVISOR * BASE_DECIMAL) as u32;
 pub const RISCV_ADDI_IMM12_MASK: u32 = 0xfff;
 pub const RISCV_ADDI_IMM12_SIGN_BIT: u32 = 0x800;
-pub const RISCV_ADDI_SIGN_EXTEND: i32 = 4096;
+pub const RISCV_ADDI_SIGN_EXTEND: i32 =
+    1 << ((BASE_DECIMAL + BISECTION_DIVISOR) as u32);
 pub const RISCV_ADDI_SP_MINUS_64: u32 = 0xfc010113;
 pub const RISCV_C_ADDI16SP_MASK: u16 = 0xef83;
 pub const RISCV_C_ADDI16SP_MATCH: u16 = 0x6101;
 pub const RISCV_C_ADDI16SP_SIGN_BIT: u16 = 0x1000;
-pub const RISCV_C_ADDI16SP_SIGN_EXTEND: i32 = 1024;
+pub const RISCV_C_ADDI16SP_SIGN_EXTEND: i32 = 1 << (BASE_DECIMAL as u32);
 
 pub const ISA_SCORE_STRONG_MARKER: usize = POW10_1;
 pub const ISA_SCORE_WEAK_MARKER: usize = BYTE_ONE;
@@ -252,7 +260,10 @@ pub const ENV_HAETAE_SERVER_URL: &str = "HAETAE_SERVER_URL";
 pub const ENV_HAETAE_OLLAMA_HOST: &str = "HAETAE_OLLAMA_HOST";
 pub const SHA256_HEX_STRING_LEN: usize = 1 << 6;
 pub const SHA256_DIGEST_BYTES: usize = 1 << 5;
-pub const MAC_ADDRESS_STR_LEN: usize = 17;
+pub const MAC_OCTETS_COUNT: usize = (DAYS_PER_WEEK as usize) - BYTE_ONE;
+pub const MAC_DELIMITERS_COUNT: usize = MAC_OCTETS_COUNT - BYTE_ONE;
+pub const MAC_ADDRESS_STR_LEN: usize =
+    (MAC_OCTETS_COUNT * HEX_CHARS_PER_BYTE) + MAC_DELIMITERS_COUNT;
 pub const LICENSE_KEY_PREFIX: &str = "HAETAE-";
 pub const LICENSE_KEY_PARTS_COUNT: usize = std::mem::size_of::<u32>();
 pub const LICENSE_PAYLOAD_SEGMENTS_COUNT: usize = std::mem::size_of::<u32>();
@@ -382,29 +393,40 @@ impl Config {
 // ============================================================================
 // XorShift64 PRNG & Multi-Parameter Payload Derivation Constants
 // ============================================================================
-pub const XORSHIFT_SHIFT_A: u32 = 13;
-pub const XORSHIFT_SHIFT_B: u32 = 7;
-pub const XORSHIFT_SHIFT_C: u32 = 17;
+pub const XORSHIFT_SHIFT_A: u32 =
+    ((1 << std::mem::size_of::<u32>()) - STEP_TRIO) as u32;
+pub const XORSHIFT_SHIFT_B: u32 = DAYS_PER_WEEK as u32;
+pub const XORSHIFT_SHIFT_C: u32 =
+    ((1 << std::mem::size_of::<u32>()) + BYTE_ONE) as u32;
 pub const XORSHIFT_DEFAULT_SEED: u64 = 0x8a5cd789635d2dff;
 pub const XORSHIFT_PAYLOAD_MASK: u64 = 0xffffffffffffffff;
 pub const PRNG_DERIVE_PRIME_1: u64 = 0x9e3779b97f4a7c15;
 pub const PRNG_DERIVE_PRIME_2: u64 = 0x6a09e667f3bcc908;
-pub const PRNG_DERIVE_SHIFT_1: u32 = 30;
-pub const PRNG_DERIVE_SHIFT_2: u32 = 27;
-pub const PRNG_DERIVE_SHIFT_3: u32 = 31;
+pub const PRNG_DERIVE_SHIFT_1: u32 = LICENSE_VALIDITY_DAYS as u32;
+pub const PRNG_DERIVE_SHIFT_2: u32 = (STEP_TRIO * STEP_TRIO * STEP_TRIO) as u32;
+pub const PRNG_DERIVE_SHIFT_3: u32 = ((1 << VSIX_MAX_SIZE_MB) - BYTE_ONE) as u32;
 
 // ============================================================================
 // Fuzzer Mutation & Boundary Configuration
 // ============================================================================
-pub const FUZZ_BOUNDARY_POWER_TWO_COUNT: usize = 64;
-pub const FUZZ_DEFAULT_MUTATION_RATE: usize = 16;
-pub const FUZZ_SAMPLE_STRIDE: usize = 7;
+pub const FUZZ_BOUNDARY_POWER_TWO_COUNT: usize = 1 << 6;
+pub const FUZZ_DEFAULT_MUTATION_RATE: usize = 1 << 4;
+pub const FUZZ_SAMPLE_STRIDE: usize = DAYS_PER_WEEK as usize;
 pub const FUZZ_MUTATION_MASK_1: u64 = 0x0000000000000001;
 pub const FUZZ_MUTATION_MASK_2: u64 = 0x8000000000000000;
 pub const FUZZ_MUTATION_MASK_3: u64 = 0x0000000080000000;
 pub const FUZZ_MUTATION_MASK_4: u64 = 0x0000000000008000;
 pub const FUZZ_MUTATION_MASK_5: u64 = 0x0000000000000080;
-pub const FUZZ_MAX_ARG_COUNT: usize = 8;
+pub const FUZZ_MAX_ARG_COUNT: usize = std::mem::size_of::<u64>();
+pub const FUZZ_MUTATION_MODES_COUNT: usize = std::mem::size_of::<u32>();
+pub const FUZZ_MODE_RANDOM: usize = BYTE_ZERO;
+pub const FUZZ_MODE_MASK: usize = BYTE_ONE;
+pub const FUZZ_MODE_ADD_ONE: usize = BISECTION_DIVISOR;
+pub const FUZZ_MODE_SMALL_OFFSET: usize = STEP_TRIO;
+pub const FUZZ_MASKS_COUNT: usize = VSIX_MAX_SIZE_MB;
+pub const FUZZ_OFFSET_RANGE_BIAS: usize = 1 << DAYS_PER_WEEK;
+pub const FUZZ_OFFSET_RANGE_SPAN: usize = 1 << std::mem::size_of::<u64>();
+pub const FUZZ_ARG_RANDOM_CHANCE: usize = std::mem::size_of::<u32>();
 
 // ============================================================================
 // Clang JIT Compilation & Native Execution
@@ -428,28 +450,28 @@ pub const WIN_EXCEPTION_STACK_OVERFLOW: u32 = 0xC00000FD;
 // PE / COFF Object & DLL Parsing Constants
 // ============================================================================
 pub const PE_DOS_HEADER_LFANEW_OFFSET: usize = 0x3C;
-pub const PE_SIGNATURE_BYTES: usize = 4;
-pub const COFF_FILE_HEADER_BYTES: usize = 20;
-pub const COFF_SECTION_HEADER_BYTES: usize = 40;
-pub const COFF_SECTION_NAME_BYTES: usize = 8;
-pub const COFF_SECTION_RAW_SIZE_OFFSET: usize = 16;
-pub const COFF_SECTION_RAW_PTR_OFFSET: usize = 20;
-pub const COFF_NUM_SECTIONS_OFFSET: usize = 2;
-pub const COFF_OPTHDR_SIZE_OFFSET: usize = 16;
-pub const COFF_SECT_HDR_START: usize = 20;
+pub const PE_SIGNATURE_BYTES: usize = std::mem::size_of::<u32>();
+pub const COFF_FILE_HEADER_BYTES: usize = BISECTION_DIVISOR * POW10_1;
+pub const COFF_SECTION_HEADER_BYTES: usize = std::mem::size_of::<u32>() * POW10_1;
+pub const COFF_SECTION_NAME_BYTES: usize = std::mem::size_of::<u64>();
+pub const COFF_SECTION_RAW_SIZE_OFFSET: usize = 1 << 4;
+pub const COFF_SECTION_RAW_PTR_OFFSET: usize = BISECTION_DIVISOR * POW10_1;
+pub const COFF_NUM_SECTIONS_OFFSET: usize = BISECTION_DIVISOR;
+pub const COFF_OPTHDR_SIZE_OFFSET: usize = 1 << 4;
+pub const COFF_SECT_HDR_START: usize = BISECTION_DIVISOR * POW10_1;
 
 // ============================================================================
 // Extended Instruction Decoding Constants (x86_64, AArch64, RISC-V)
 // ============================================================================
-pub const X86_MAX_INSN_LEN: usize = 15;
+pub const X86_MAX_INSN_LEN: usize = (1 << 4) - 1;
 pub const X86_OPCODE_JMP_REL8: u8 = 0xeb;
 pub const X86_OPCODE_JMP_REL32: u8 = 0xe9;
 pub const X86_OPCODE_CALL_REL32: u8 = 0xe8;
 pub const X86_OPCODE_JCC_REL8_BASE: u8 = 0x70;
-pub const X86_OPCODE_JCC_REL8_COUNT: u8 = 16;
+pub const X86_OPCODE_JCC_REL8_COUNT: u8 = 1 << 4;
 pub const X86_OPCODE_TWO_BYTE_ESCAPE: u8 = 0x0f;
 pub const X86_OPCODE_JCC_REL32_BASE: u8 = 0x80;
-pub const X86_OPCODE_JCC_REL32_COUNT: u8 = 16;
+pub const X86_OPCODE_JCC_REL32_COUNT: u8 = 1 << 4;
 pub const X86_MODRM_MOD_MASK: u8 = 0xc0;
 pub const X86_MODRM_REG_MASK: u8 = 0x38;
 pub const X86_MODRM_RM_MASK: u8 = 0x07;
@@ -459,8 +481,8 @@ pub const X86_MODRM_MOD_DISP32: u8 = 0x80;
 pub const X86_MODRM_RM_SIB: u8 = 0x04;
 pub const X86_MODRM_RM_DISP32_ONLY: u8 = 0x05;
 pub const X86_SIB_BASE_DISP32_ONLY: u8 = 0x05;
-pub const X86_REG_RSP_CODE: u8 = 4;
-pub const X86_SUB_REG_CODE: u8 = 5;
+pub const X86_REG_RSP_CODE: u8 = std::mem::size_of::<u32>() as u8;
+pub const X86_SUB_REG_CODE: u8 = VSIX_MAX_SIZE_MB as u8;
 pub const X86_ADD_REG_CODE: u8 = 0;
 pub const X86_OPCODE_INT3: u8 = 0xcc;
 pub const X86_OPCODE_GRP1_IMM8: u8 = X86_SUB_IMM8_OP;
@@ -488,7 +510,7 @@ pub const X86_PREFIX_ADDRESS_SIZE: u8 = 0x67;
 pub const X86_REX_MIN: u8 = 0x40;
 pub const X86_REX_MAX: u8 = 0x4f;
 
-pub const AARCH64_BRANCH_SCALE_BYTES: usize = 4;
+pub const AARCH64_BRANCH_SCALE_BYTES: usize = std::mem::size_of::<u32>();
 
 pub const AARCH64_B_BL_MASK: u32 = 0xfc000000;
 pub const AARCH64_B_MATCH: u32 = 0x14000000;
@@ -500,12 +522,14 @@ pub const AARCH64_CBZ_MATCH: u32 = 0x34000000;
 pub const AARCH64_CBNZ_MATCH: u32 = 0x35000000;
 pub const AARCH64_IMM26_MASK: u32 = 0x03ffffff;
 pub const AARCH64_IMM26_SIGN_BIT: u32 = 0x02000000;
-pub const AARCH64_IMM26_SIGN_EXTEND: i32 = 0x04000000;
+pub const AARCH64_IMM26_SIGN_EXTEND: i32 =
+    1 << ((HOURS_PER_DAY as u32) + (BISECTION_DIVISOR as u32));
 pub const AARCH64_IMM19_MASK: u32 = 0x7ffff;
-pub const AARCH64_IMM19_SHIFT: u32 = 5;
+pub const AARCH64_IMM19_SHIFT: u32 = VSIX_MAX_SIZE_MB as u32;
 pub const AARCH64_IMM19_SIGN_BIT: u32 = 0x40000;
-pub const AARCH64_IMM19_SIGN_EXTEND: i32 = 0x80000;
-pub const AARCH64_BRANCH_ALIGN_SHIFT: u32 = 2;
+pub const AARCH64_IMM19_SIGN_EXTEND: i32 =
+    1 << (((DAYS_PER_WEEK as u32) * (BISECTION_DIVISOR as u32)) + (VSIX_MAX_SIZE_MB as u32));
+pub const AARCH64_BRANCH_ALIGN_SHIFT: u32 = BISECTION_DIVISOR as u32;
 
 pub const RISCV_JAL_OPCODE_MASK: u32 = 0x7f;
 pub const RISCV_JAL_OPCODE_MATCH: u32 = 0x6f;
@@ -515,4 +539,4 @@ pub const RISCV_C_J_MATCH: u16 = 0xa001;
 pub const RISCV_C_BEQZ_MASK: u16 = 0xe003;
 pub const RISCV_C_BEQZ_MATCH: u16 = 0xc001;
 pub const RISCV_C_BNEZ_MATCH: u16 = 0xe001;
-pub const RISCV_BRANCH_ALIGN_SHIFT: u32 = 1;
+pub const RISCV_BRANCH_ALIGN_SHIFT: u32 = BYTE_ONE as u32;
