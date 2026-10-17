@@ -7,3 +7,7 @@ extension.original.js
 config.original.js
 *.obf.js
 *.min.js
+*.txt
+*.ps1
+*.md
+
