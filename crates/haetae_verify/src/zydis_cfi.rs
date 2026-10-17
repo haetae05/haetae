@@ -247,38 +247,19 @@ impl X86_64Verifier {
                 "Empty bytecode cannot be verified".to_string(),
             ));
         }
-        let mut idx = 0;
-        while idx < bytecode.len() {
-            let b = bytecode[idx];
-            if idx + 1 < bytecode.len() {
-                let next = bytecode[idx + 1];
-                if (b == X86_OPCODE_TWO_BYTE_ESCAPE
-                    && (next == X86_OPCODE_SYSCALL || next == X86_OPCODE_SYSENTER))
-                    || (b == X86_OPCODE_INT_N && next == X86_INT_VECTOR_COMPAT_LINUX)
-                {
+        let mut offset = 0;
+        while offset < bytecode.len() {
+            if let Some(insn) = Self::decode_instruction(bytecode, offset) {
+                if insn.is_banned {
                     return Err(VerifyError::CfiViolation(
                         "Banned system/privileged instruction detected".to_string(),
                     ));
                 }
+                let len = insn.length.max(1);
+                offset += len;
+            } else {
+                offset += 1;
             }
-            if b == X86_OPCODE_INT3
-                || b == X86_OPCODE_IN_AL_IMM8
-                || b == X86_OPCODE_IN_EAX_IMM8
-                || b == X86_OPCODE_IN_AL_DX
-                || b == X86_OPCODE_IN_EAX_DX
-                || b == X86_OPCODE_OUT_IMM8_AL
-                || b == X86_OPCODE_OUT_IMM8_EAX
-                || b == X86_OPCODE_OUT_DX_AL
-                || b == X86_OPCODE_OUT_DX_EAX
-                || b == X86_OPCODE_CLI
-                || b == X86_OPCODE_STI
-                || b == X86_OPCODE_HLT
-            {
-                return Err(VerifyError::CfiViolation(
-                    "Banned system/privileged instruction detected".to_string(),
-                ));
-            }
-            idx += 1;
         }
         Ok(())
     }
@@ -403,8 +384,7 @@ impl X86_64Verifier {
                         pos += 1;
                     }
                 }
-                X86_OPCODE_INT3
-                | X86_OPCODE_IN_AL_IMM8
+                X86_OPCODE_IN_AL_IMM8
                 | X86_OPCODE_IN_EAX_IMM8
                 | X86_OPCODE_IN_AL_DX
                 | X86_OPCODE_IN_EAX_DX
