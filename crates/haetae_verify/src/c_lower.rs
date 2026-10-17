@@ -1,5 +1,5 @@
 use crate::tcc_engine::VerifyError;
-use haetae_core::config::HEX_RADIX;
+use haetae_core::config::{HEX_RADIX, STEP_PEEK, STEP_TRIO};
 use std::collections::{HashMap, HashSet};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -164,8 +164,7 @@ impl<'a> LowerLexer<'a> {
                         | Some(LowerToken::RBracket)
                 );
 
-                let mut peek_idx = self.pos + 1;
-                peek_idx += 1;
+                let mut peek_idx = self.pos + STEP_PEEK;
                 while peek_idx < self.chars.len()
                     && (self.chars[peek_idx] == ' ' || self.chars[peek_idx] == '\t')
                 {
@@ -181,8 +180,7 @@ impl<'a> LowerLexer<'a> {
                         || self.chars[peek_idx] == '$');
 
                 if is_prev_operand && is_next_operand {
-                    self.pos += 1;
-                    self.pos += 1;
+                    self.pos += STEP_PEEK;
                     tokens.push(LowerToken::DoubleSlash);
                     continue;
                 } else {
@@ -195,12 +193,10 @@ impl<'a> LowerLexer<'a> {
 
             // 4. Multi-line block comments (/* ... */)
             if c == '/' && self.pos + 1 < self.chars.len() && self.chars[self.pos + 1] == '*' {
-                self.pos += 1;
-                self.pos += 1;
+                self.pos += STEP_PEEK;
                 while self.pos + 1 < self.chars.len() {
                     if self.chars[self.pos] == '*' && self.chars[self.pos + 1] == '/' {
-                        self.pos += 1;
-                        self.pos += 1;
+                        self.pos += STEP_PEEK;
                         break;
                     }
                     self.pos += 1;
@@ -215,8 +211,7 @@ impl<'a> LowerLexer<'a> {
                     && self.pos + 1 < self.chars.len()
                     && (self.chars[self.pos + 1] == 'x' || self.chars[self.pos + 1] == 'X')
                 {
-                    self.pos += 1;
-                    self.pos += 1;
+                    self.pos += STEP_PEEK;
                     while self.pos < self.chars.len() && self.chars[self.pos].is_ascii_hexdigit() {
                         num_str.push(self.chars[self.pos]);
                         self.pos += 1;
@@ -1503,9 +1498,7 @@ impl<'a> StructuredCLowerer<'a> {
                     &self.tokens[self.pos..]
                 {
                     if id == "vec" {
-                        self.pos += 1;
-                        self.pos += 1;
-                        self.pos += 1;
+                        self.pos += STEP_TRIO;
                         return self.parse_array_decl_after_lbracket(&var_name);
                     }
                 }
@@ -1522,9 +1515,7 @@ impl<'a> StructuredCLowerer<'a> {
                     &self.tokens[self.pos..]
                 {
                     if id == "vec" {
-                        self.pos += 1;
-                        self.pos += 1;
-                        self.pos += 1;
+                        self.pos += STEP_TRIO;
                         return self.parse_array_items("arr");
                     }
                 }
@@ -1536,9 +1527,7 @@ impl<'a> StructuredCLowerer<'a> {
                     {
                         let ty = format!("{}*", name);
                         let var_name = var.clone();
-                        self.pos += 1;
-                        self.pos += 1;
-                        self.pos += 1;
+                        self.pos += STEP_TRIO;
                         self.declared_vars.insert(var_name.clone());
                         if self.match_tok(&LowerToken::Eq) {
                             let init_expr = self.parse_expr()?;
@@ -1557,9 +1546,7 @@ impl<'a> StructuredCLowerer<'a> {
                         &self.tokens[self.pos..]
                     {
                         let var_name = var.clone();
-                        self.pos += 1; // skip type
-                        self.pos += 1; // skip var
-                        self.pos += 1; // skip [
+                        self.pos += STEP_TRIO; // skip type, var, [
                         let mut arr_sz_str = String::new();
                         if let Some(LowerToken::Number(sz)) = self.peek() {
                             arr_sz_str = format!("{}", sz);
@@ -1628,8 +1615,7 @@ impl<'a> StructuredCLowerer<'a> {
                 // Simple assignment: var = expr OR var := expr
                 if next_tok == Some(&LowerToken::Eq) || next_tok == Some(&LowerToken::ColonEq) {
                     let var_name = name.clone();
-                    self.pos += 1;
-                    self.pos += 1;
+                    self.pos += STEP_PEEK;
 
                     if self.peek() == Some(&LowerToken::LBracket) {
                         return self.parse_array_decl(&var_name);
@@ -1639,9 +1625,7 @@ impl<'a> StructuredCLowerer<'a> {
                         &self.tokens[self.pos..]
                     {
                         if id == "vec" {
-                            self.pos += 1;
-                            self.pos += 1;
-                            self.pos += 1;
+                            self.pos += STEP_TRIO;
                             return self.parse_array_decl_after_lbracket(&var_name);
                         }
                     }
@@ -1660,24 +1644,21 @@ impl<'a> StructuredCLowerer<'a> {
                 // Compound assignments
                 if next_tok == Some(&LowerToken::PlusEq) {
                     let var_name = name.clone();
-                    self.pos += 1;
-                    self.pos += 1;
+                    self.pos += STEP_PEEK;
                     let expr = self.parse_expr()?;
                     self.match_tok(&LowerToken::Semi);
                     return Ok(format!("{} = ({} + ({}));", var_name, var_name, expr));
                 }
                 if next_tok == Some(&LowerToken::MinusEq) {
                     let var_name = name.clone();
-                    self.pos += 1;
-                    self.pos += 1;
+                    self.pos += STEP_PEEK;
                     let expr = self.parse_expr()?;
                     self.match_tok(&LowerToken::Semi);
                     return Ok(format!("{} = ({} - ({}));", var_name, var_name, expr));
                 }
                 if next_tok == Some(&LowerToken::StarEq) {
                     let var_name = name.clone();
-                    self.pos += 1;
-                    self.pos += 1;
+                    self.pos += STEP_PEEK;
                     let expr = self.parse_expr()?;
                     self.match_tok(&LowerToken::Semi);
                     return Ok(format!(
@@ -1687,8 +1668,7 @@ impl<'a> StructuredCLowerer<'a> {
                 }
                 if next_tok == Some(&LowerToken::SlashEq) {
                     let var_name = name.clone();
-                    self.pos += 1;
-                    self.pos += 1;
+                    self.pos += STEP_PEEK;
                     let expr = self.parse_expr()?;
                     self.match_tok(&LowerToken::Semi);
                     return Ok(format!(
@@ -1698,8 +1678,7 @@ impl<'a> StructuredCLowerer<'a> {
                 }
                 if next_tok == Some(&LowerToken::PercentEq) {
                     let var_name = name.clone();
-                    self.pos += 1;
-                    self.pos += 1;
+                    self.pos += STEP_PEEK;
                     let expr = self.parse_expr()?;
                     self.match_tok(&LowerToken::Semi);
                     return Ok(format!(
@@ -1709,15 +1688,13 @@ impl<'a> StructuredCLowerer<'a> {
                 }
                 if next_tok == Some(&LowerToken::PlusPlus) {
                     let var_name = name.clone();
-                    self.pos += 1;
-                    self.pos += 1;
+                    self.pos += STEP_PEEK;
                     self.match_tok(&LowerToken::Semi);
                     return Ok(format!("{} = ({} + 1);", var_name, var_name));
                 }
                 if next_tok == Some(&LowerToken::MinusMinus) {
                     let var_name = name.clone();
-                    self.pos += 1;
-                    self.pos += 1;
+                    self.pos += STEP_PEEK;
                     self.match_tok(&LowerToken::Semi);
                     return Ok(format!("{} = ({} - 1);", var_name, var_name));
                 }
@@ -2166,8 +2143,7 @@ impl<'a> StructuredCLowerer<'a> {
                 if s == "Math" {
                     if let [LowerToken::Dot, LowerToken::Ident(m), ..] = &self.tokens[self.pos..] {
                         if m == "floor" {
-                            self.pos += 1;
-                            self.pos += 1;
+                            self.pos += STEP_PEEK;
                             return self.parse_primary();
                         }
                     }
@@ -2198,6 +2174,20 @@ impl<'a> StructuredCLowerer<'a> {
     }
 }
 
+fn map_fuzz_c_type(ptype: &str) -> &'static str {
+    match ptype {
+        "int" | "i32" | "number" | "Int" => "int",
+        "unsigned int" | "u32" => "unsigned int",
+        "long" | "i64" => "long long",
+        "unsigned long" | "u64" => "unsigned long long",
+        "float" | "f32" => "float",
+        "double" | "f64" => "double",
+        "char*" | "&str" | "string" | "String" => "const char*",
+        "void*" | "*mut" | "*const" | "ptr" => "void*",
+        _ => "int",
+    }
+}
+
 pub fn generate_c_fuzz_harness(func_name: &str, param_types: &[&str]) -> String {
     generate_multi_c_fuzz_harness(&[(func_name, param_types)])
 }
@@ -2215,22 +2205,47 @@ pub fn generate_multi_c_fuzz_harness(funcs: &[(&str, &[&str])]) -> String {
     // 64-bit Payload Derivation Helper (avalanche bit mixer with boundary mutations)
     out.push_str(
         r#"
+#ifndef HAETAE_FUZZ_DERIVATION_DEFS
+#define HAETAE_FUZZ_DERIVATION_DEFS
+#define HAETAE_SPLITMIX64_GAMMA 0x9e3779b97f4a7c15ULL
+#define HAETAE_SPLITMIX64_MUL1  0xbf58476d1ce4e5b9ULL
+#define HAETAE_SPLITMIX64_MUL2  0x94d049bb133111ebULL
+#define HAETAE_MIX_SHIFT_A      30
+#define HAETAE_MIX_SHIFT_B      27
+#define HAETAE_MIX_SHIFT_C      31
+#define HAETAE_FUZZ_MODE_MASK   15U
+#define HAETAE_FUZZ_MODE_ZERO   0U
+#define HAETAE_FUZZ_MODE_ONE    1U
+#define HAETAE_FUZZ_MODE_ALL_ONES 2U
+#define HAETAE_FUZZ_MODE_I64_MAX  3U
+#define HAETAE_FUZZ_MODE_I64_MIN  4U
+#define HAETAE_FUZZ_MODE_I32_MAX  5U
+#define HAETAE_FUZZ_MODE_I32_MIN  6U
+#define HAETAE_FUZZ_I64_MAX     0x7fffffffffffffffULL
+#define HAETAE_FUZZ_I64_MIN     0x8000000000000000ULL
+#define HAETAE_FUZZ_I32_MAX     0x7fffffffULL
+#define HAETAE_FUZZ_I32_MIN     ((unsigned long long)(int)0x80000000)
+#define HAETAE_FUZZ_IS_EVEN(v)  ((((v) & 1ULL) == 0ULL))
+#endif
+
 static inline unsigned long long haetae_derive_payload(unsigned long long seed, unsigned int idx) {
-    unsigned long long x = seed ^ (((unsigned long long)(idx + 1)) * 0x9e3779b97f4a7c15ULL);
-    x ^= x >> 30;
-    x *= 0xbf58476d1ce4e5b9ULL;
-    x ^= x >> 27;
-    x *= 0x94d049bb133111ebULL;
-    x ^= x >> 31;
-    unsigned int mode = (unsigned int)(x & 15);
-    if (mode == 0) return 0ULL;
-    if (mode == 1) return 1ULL;
-    if (mode == 2) return ~0ULL;
-    if (mode == 3) return 0x7fffffffffffffffULL;
-    if (mode == 4) return 0x8000000000000000ULL;
-    if (mode == 5) return 0x7fffffffULL;
-    if (mode == 6) return (unsigned long long)(int)0x80000000;
-    return x;
+    unsigned long long x = seed ^ (((unsigned long long)(idx + 1)) * HAETAE_SPLITMIX64_GAMMA);
+    x ^= x >> HAETAE_MIX_SHIFT_A;
+    x *= HAETAE_SPLITMIX64_MUL1;
+    x ^= x >> HAETAE_MIX_SHIFT_B;
+    x *= HAETAE_SPLITMIX64_MUL2;
+    x ^= x >> HAETAE_MIX_SHIFT_C;
+    unsigned int mode = (unsigned int)(x & HAETAE_FUZZ_MODE_MASK);
+    switch (mode) {
+        case HAETAE_FUZZ_MODE_ZERO:     return 0ULL;
+        case HAETAE_FUZZ_MODE_ONE:      return 1ULL;
+        case HAETAE_FUZZ_MODE_ALL_ONES: return ~0ULL;
+        case HAETAE_FUZZ_MODE_I64_MAX:  return HAETAE_FUZZ_I64_MAX;
+        case HAETAE_FUZZ_MODE_I64_MIN:  return HAETAE_FUZZ_I64_MIN;
+        case HAETAE_FUZZ_MODE_I32_MAX:  return HAETAE_FUZZ_I32_MAX;
+        case HAETAE_FUZZ_MODE_I32_MIN:  return HAETAE_FUZZ_I32_MIN;
+        default:                        return x;
+    }
 }
 "#,
     );
@@ -2258,17 +2273,7 @@ static inline unsigned long long haetae_derive_payload(unsigned long long seed, 
 
         for (p_idx, ptype) in param_types.iter().enumerate() {
             let var_name = format!("p{}", p_idx);
-            let c_type = match *ptype {
-                "int" | "i32" | "number" | "Int" => "int",
-                "unsigned int" | "u32" => "unsigned int",
-                "long" | "i64" => "long long",
-                "unsigned long" | "u64" => "unsigned long long",
-                "float" | "f32" => "float",
-                "double" | "f64" => "double",
-                "char*" | "&str" | "string" | "String" => "const char*",
-                "void*" | "*mut" | "*const" | "ptr" => "void*",
-                _ => "int",
-            };
+            let c_type = map_fuzz_c_type(ptype);
 
             let src_var = if is_multi { "p" } else { "payload" };
 
@@ -2294,11 +2299,11 @@ static inline unsigned long long haetae_derive_payload(unsigned long long seed, 
                         c_type, var_name, src_var, p_idx
                     )),
                     "const char*" => declarations.push(format!(
-                        "{} {} = (haetae_derive_payload((unsigned long long){}, {}) % 2 == 0) ? (const char*)0 : \"test_payload\"",
+                        "{} {} = HAETAE_FUZZ_IS_EVEN(haetae_derive_payload((unsigned long long){}, {})) ? (const char*)0 : \"test_payload\"",
                         c_type, var_name, src_var, p_idx
                     )),
                     "void*" => declarations.push(format!(
-                        "{} {} = (haetae_derive_payload((unsigned long long){}, {}) % 2 == 0) ? (void*)0 : (void*)1",
+                        "{} {} = HAETAE_FUZZ_IS_EVEN(haetae_derive_payload((unsigned long long){}, {})) ? (void*)0 : (void*)1",
                         c_type, var_name, src_var, p_idx
                     )),
                     _ => declarations.push(format!(
@@ -2366,17 +2371,7 @@ static inline unsigned long long haetae_derive_payload(unsigned long long seed, 
 
         for (i, ptype) in param_types.iter().enumerate() {
             let var_name = format!("p{}", i);
-            let c_type = match *ptype {
-                "int" | "i32" | "number" | "Int" => "int",
-                "unsigned int" | "u32" => "unsigned int",
-                "long" | "i64" => "long long",
-                "unsigned long" | "u64" => "unsigned long long",
-                "float" | "f32" => "float",
-                "double" | "f64" => "double",
-                "char*" | "&str" | "string" | "String" => "const char*",
-                "void*" | "*mut" | "*const" | "ptr" => "void*",
-                _ => "int",
-            };
+            let c_type = map_fuzz_c_type(ptype);
 
             if i == 0 {
                 declarations.push(format!(

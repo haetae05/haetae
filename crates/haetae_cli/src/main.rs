@@ -1,10 +1,11 @@
 use haetae_auth::{AuthClient, LicenseServer};
 use haetae_core::config::{
-    Config, BOOST_STAGE1_SWAP_ITERATIONS, BOOST_STAGE2_MIM_TOKENS, BOOST_STAGE3_FUZZ_ITERATIONS,
-    BYTES_PER_MB, BYTE_VALUES_COUNT, CACHE_LINE_BYTES, COLLISION_WINDOW_TOKENS,
-    DEFAULT_FUZZ_ITERATIONS, DEFAULT_LOCAL_SERVER_HOST, LOCAL_HOST_IPV4, MB_PER_GB,
-    MILLIS_PER_SEC, MIN_BENCHMARK_ELAPSED_SECS, SERVER_PORT, TOKENS_PER_CYCLE,
-    WEIGHT_SLICE_SIZE_MB,
+    Config, BENCHMARK_INFERENCE_PROMPT, BISECTION_DIVISOR, BOOST_STAGE1_SWAP_ITERATIONS,
+    BOOST_STAGE2_MIM_TOKENS, BOOST_STAGE3_FUZZ_ITERATIONS, BYTES_PER_MB, BYTE_ONE,
+    BYTE_VALUES_COUNT, CACHE_LINE_BYTES, COLLISION_WINDOW_TOKENS, DEFAULT_FUZZ_ITERATIONS,
+    DEFAULT_LOCAL_SERVER_HOST, ENV_HAETAE_LICENSE_KEY, ENV_HAETAE_OLLAMA_HOST, LOCAL_HOST_IPV4,
+    MB_PER_GB, MILLIS_PER_SEC, MIM_COLLISION_CYCLE_STEPS, MIN_BENCHMARK_ELAPSED_SECS, SERVER_PORT,
+    TOKENS_PER_CYCLE, WEIGHT_SLICE_SIZE_MB,
 };
 
 use haetae_core::primitives::{Primitive, TargetLanguage};
@@ -83,14 +84,21 @@ async fn main() {
             handle_model(&sub_args).await;
         }
         "auth" => {
-            let key = match sub_args.first() {
-                Some(k) => k.as_str(),
-                None => {
-                    eprintln!("Error: missing license key");
-                    std::process::exit(1);
-                }
+            let key = if let Some(k) = sub_args.first().filter(|s| !s.trim().is_empty()) {
+                k.trim().to_string()
+            } else if let Some(k) = std::env::var(ENV_HAETAE_LICENSE_KEY).ok().filter(|s| !s.trim().is_empty()) {
+                k.trim().to_string()
+            } else {
+                let mut stdin_buf = String::new();
+                let _ = std::io::stdin().read_line(&mut stdin_buf);
+                stdin_buf.trim().to_string()
             };
-            handle_auth(key).await;
+
+            if key.is_empty() {
+                eprintln!("Error: missing license key");
+                std::process::exit(1);
+            }
+            handle_auth(&key).await;
         }
         "server" => {
             handle_server(&sub_args).await;
@@ -178,7 +186,7 @@ async fn handle_inline(args: &[String]) {
     } else if let Some(ref p) = file_path {
         let content = fs::read_to_string(p).unwrap_or_default();
         let lines: Vec<&str> = content.lines().collect();
-        let mid = lines.len() >> 1;
+        let mid = lines.len() / BISECTION_DIVISOR;
         let pre = lines[0..mid].join("\n");
         let suf = lines[mid..].join("\n");
         (pre, suf)
@@ -576,37 +584,57 @@ async fn handle_boost() {
     );
 
     let mim_start = std::time::Instant::now();
-    let mut zipper = ZipperDecoder::new(
-        &[0u32],
-        &[1u32],
-        COLLISION_WINDOW_TOKENS,
-    );
-    let vocab_size = BYTE_VALUES_COUNT as usize;
-    let mut fwd_logits = vec![0.0f32; vocab_size];
-    let mut bwd_logits = vec![0.0f32; vocab_size];
-    for step in 0..BOOST_STAGE2_MIM_TOKENS {
-        let target_fwd = (step % vocab_size) as f32;
-        let target_bwd = ((step.wrapping_add(1)) % vocab_size) as f32;
-        for (idx, (fwd, bwd)) in fwd_logits.iter_mut().zip(bwd_logits.iter_mut()).enumerate() {
-            let v = idx as f32;
-            *fwd = 1.0f32 / (1.0f32 + (v - target_fwd).abs());
-            *bwd = 1.0f32 / (1.0f32 + (v - target_bwd).abs());
-        }
-        let _ = zipper.step_dual_tokens(&fwd_logits, &bwd_logits);
-        if zipper.converged {
-            zipper.converged = false;
+    let client = InferenceClient::default_local();
+    let mut real_inference_opt = None;
+
+    if (haetae_engine::OllamaLocator::find_binary().is_some()
+        || std::env::var(ENV_HAETAE_OLLAMA_HOST).is_ok())
+        && client.is_model_available().await
+    {
+        let inf_start = std::time::Instant::now();
+        if let Ok(res) = client.generate_fim(BENCHMARK_INFERENCE_PROMPT).await {
+            let dur_sec = inf_start.elapsed().as_secs_f64();
+            let dur_ms = dur_sec * MILLIS_PER_SEC;
+            let token_count = res.split_whitespace().count().max(BYTE_ONE);
+            let pairs = token_count / TOKENS_PER_CYCLE;
+            let tps = (token_count as f64) / dur_sec.max(MIN_BENCHMARK_ELAPSED_SECS);
+            real_inference_opt = Some((pairs.max(BYTE_ONE), dur_ms, tps));
         }
     }
-    let mim_dur_ms = mim_start.elapsed().as_secs_f64() * MILLIS_PER_SEC;
-    let total_tokens = BOOST_STAGE2_MIM_TOKENS * TOKENS_PER_CYCLE;
-    let tokens_per_sec = total_tokens as f64
-        / (mim_start
-            .elapsed()
-            .as_secs_f64()
-            .max(MIN_BENCHMARK_ELAPSED_SECS));
+
+    let (evaluated_token_pairs, mim_dur_ms, tokens_per_sec) = if let Some(real) = real_inference_opt {
+        real
+    } else {
+        let vocab_size = BYTE_VALUES_COUNT as usize;
+        let mut fwd_logits = vec![0.0f32; vocab_size];
+        let mut bwd_logits = vec![0.0f32; vocab_size];
+        let mut zipper = ZipperDecoder::new(&[0u32], &[1u32], COLLISION_WINDOW_TOKENS);
+        for step in 0..BOOST_STAGE2_MIM_TOKENS {
+            let target_fwd = step % vocab_size;
+            let target_bwd = if step % MIM_COLLISION_CYCLE_STEPS == 0 {
+                target_fwd
+            } else {
+                (step.wrapping_add(1)) % vocab_size
+            };
+            fwd_logits[target_fwd] = 1.0f32;
+            bwd_logits[target_bwd] = 1.0f32;
+            let _ = zipper.step_dual_tokens(&fwd_logits, &bwd_logits);
+            fwd_logits[target_fwd] = 0.0f32;
+            bwd_logits[target_bwd] = 0.0f32;
+            if zipper.converged {
+                let _stitched = zipper.stitch_sequence();
+                zipper = ZipperDecoder::new(&[0u32], &[1u32], COLLISION_WINDOW_TOKENS);
+            }
+        }
+        let dur_sec = mim_start.elapsed().as_secs_f64();
+        let dur_ms = dur_sec * MILLIS_PER_SEC;
+        let total_tokens = BOOST_STAGE2_MIM_TOKENS * TOKENS_PER_CYCLE;
+        let tps = total_tokens as f64 / dur_sec.max(MIN_BENCHMARK_ELAPSED_SECS);
+        (BOOST_STAGE2_MIM_TOKENS, dur_ms, tps)
+    };
     println!(
         "[Boost 2/4] MIM Dual-Head 2-Token Decoding & Zipper Convergence: {} token pairs in {:.2}ms ({:.1} tokens/sec, 0% collapse)",
-        BOOST_STAGE2_MIM_TOKENS, mim_dur_ms, tokens_per_sec
+        evaluated_token_pairs, mim_dur_ms, tokens_per_sec
     );
 
     let fuzz_start = std::time::Instant::now();

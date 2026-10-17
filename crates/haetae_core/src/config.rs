@@ -4,6 +4,9 @@
 
 pub const BYTE_ZERO: usize = 0;
 pub const BYTE_ONE: usize = 1;
+pub const BISECTION_DIVISOR: usize = 2;
+pub const STEP_PEEK: usize = 2;
+pub const STEP_TRIO: usize = 3;
 
 pub const BOOST_STAGE1_SWAP_ITERATIONS: usize = 50;
 pub const BOOST_STAGE2_MIM_TOKENS: usize = 50_000;
@@ -75,7 +78,7 @@ pub const SECS_PER_DAY: u64 = 86_400;
 pub const SERVER_BUFFER_CHUNK_SIZE: usize = MODEL_DOWNLOAD_CHUNK_SIZE;
 pub const SIZE_HAETAE_EXE_BYTES: u64 = 3_203_072;
 pub const SIZE_HAETAE_LINUX_ARM64_BYTES: u64 = 3_348_488;
-pub const SIZE_HAETAE_VSIX_BYTES: u64 = 8_588;
+pub const SIZE_HAETAE_VSIX_BYTES: u64 = 3_224_622;
 
 pub const X86_NOP_OPCODE: u8 = 0x90;
 pub const X86_RET_OPCODE: u8 = 0xc3;
@@ -228,9 +231,11 @@ pub const HEX_CHARS_PER_BYTE: usize = 2;
 pub const TOKEN_PARTS_COUNT: usize = 2;
 pub const HMAC_SHA256_TAG_BYTES: usize = 32;
 pub const HEX_RADIX: u32 = 16;
+pub const ENV_HAETAE_LICENSE_KEY: &str = "HAETAE_LICENSE_KEY";
 pub const ENV_HAETAE_LICENSE_SECRET: &str = "HAETAE_LICENSE_SECRET";
 pub const ENV_HAETAE_MACHINE_ID: &str = "HAETAE_MACHINE_ID";
 pub const ENV_HAETAE_SERVER_URL: &str = "HAETAE_SERVER_URL";
+pub const ENV_HAETAE_OLLAMA_HOST: &str = "HAETAE_OLLAMA_HOST";
 pub const SHA256_HEX_STRING_LEN: usize = 64;
 pub const SHA256_DIGEST_BYTES: usize = 32;
 pub const MAC_ADDRESS_STR_LEN: usize = 17;
@@ -243,12 +248,14 @@ pub const LEMONSQUEEZY_STATUS_ACTIVE: &str = "active";
 
 pub const L3_BENCHMARK_ITERATIONS: usize = 10;
 pub const MIM_BENCHMARK_ITERATIONS: usize = 1000;
+pub const MIM_COLLISION_CYCLE_STEPS: usize = 10;
+pub const BENCHMARK_INFERENCE_PROMPT: &str = "int add(int a, int b) {";
 
 pub const QWEN_MODEL_URL: &str =
     "https://huggingface.co/Qwen/Qwen2.5-Coder-1.5B-Instruct-GGUF/resolve/main/qwen2.5-coder-1.5b-instruct-q4_k_m.gguf";
 pub const JINA_SEARCH_BASE_URL: &str = "https://s.jina.ai/";
 pub const JINA_READER_BASE_URL: &str = "https://r.jina.ai/";
-pub const DEFAULT_ORACLE_SERVER_HOST: &str = "https://auth.haetae.dev";
+pub const DEFAULT_ORACLE_SERVER_HOST: &str = "http://152.69.226.30:8080";
 pub const DEFAULT_LOCAL_SERVER_HOST: &str = "http://127.0.0.1:8080";
 pub const LOCAL_HOST_IPV4: &str = "127.0.0.1";
 

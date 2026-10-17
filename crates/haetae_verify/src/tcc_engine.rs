@@ -383,39 +383,27 @@ impl TccEngine {
 
         #[cfg(any(target_os = "windows", unix))]
         {
-            if let Some(compiler_path) = Self::find_c_compiler() {
-                if let Ok(compiled) = self.compile_with_compiler(c_code, entry_name, &compiler_path)
-                {
-                    return Ok(compiled);
-                }
-            }
+            let compiler_path = Self::find_c_compiler().ok_or_else(|| {
+                VerifyError::CompileError(
+                    "C compiler not available or compilation failed: no C compiler (clang/gcc) found in PATH or environment".to_string(),
+                )
+            })?;
+            self.compile_with_compiler(c_code, entry_name, &compiler_path)
+                .map_err(|e| {
+                    VerifyError::CompileError(format!(
+                        "C compiler not available or compilation failed: {}",
+                        e
+                    ))
+                })
         }
 
-        // Fallback when compiler is unavailable or for abstract verification / miri
-        let bytecode = crate::zydis_cfi::X86_64Verifier::decode_all_instructions(&[
-            haetae_core::config::X86_NOP_OPCODE,
-            haetae_core::config::X86_RET_OPCODE,
-        ]);
-        let fallback_bytes = if !bytecode.is_empty() {
-            vec![
-                haetae_core::config::X86_NOP_OPCODE,
-                haetae_core::config::X86_RET_OPCODE,
-            ]
-        } else {
-            vec![haetae_core::config::X86_RET_OPCODE]
-        };
-
-        Ok(CompiledCode {
-            state: std::ptr::null_mut(),
-            entry_symbol: entry_name.to_string(),
-            relocated_size: c_code.len(),
-            source_code: c_code.to_string(),
-            bytecode: fallback_bytes,
-            module_handle: std::ptr::null_mut(),
-            safe_call_fn: None,
-            safe_call_multi_fn: None,
-            temp_paths: Vec::new(),
-        })
+        #[cfg(not(any(target_os = "windows", unix)))]
+        {
+            Err(VerifyError::CompileError(
+                "C compiler not available or compilation failed: platform not supported"
+                    .to_string(),
+            ))
+        }
     }
 
     pub fn compile_with_clang(
