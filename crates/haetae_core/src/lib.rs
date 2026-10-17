@@ -3,7 +3,6 @@ pub mod primitives;
 pub mod repo_map;
 pub mod scaffolding;
 pub mod spec_parser;
-pub mod syntax_matrix;
 pub mod web_research;
 
 pub use config::{Config, TargetIsa, DEFAULT_CONTEXT_WINDOW_TOKENS, DEFAULT_FUZZ_ITERATIONS};

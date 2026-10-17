@@ -1,6 +1,5 @@
 pub mod c_lower;
 pub mod diagnostics;
-pub mod evaluator;
 pub mod fuzzer;
 pub mod headers;
 pub mod tcc_engine;

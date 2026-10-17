@@ -12,6 +12,4 @@ pub use crypto::{
     parse_license_token_payload, verify_license_key, verify_license_token, LicenseTokenPayload,
 };
 pub use machine_id::{get_hardware_machine_id, get_hardware_machine_id_with_override};
-pub use server::{
-    dispatch_route, verify_lemonsqueezy_webhook_signature, HttpRoute, LicenseServer,
-};
+pub use server::{dispatch_route, verify_lemonsqueezy_webhook_signature, HttpRoute, LicenseServer};

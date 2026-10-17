@@ -351,7 +351,10 @@ async fn serve_file_stream(
     let file_len = metadata.len();
 
     let disposition = if let Some(fname) = attachment_filename {
-        format!("Content-Disposition: attachment; filename=\"{}\"\r\n", fname)
+        format!(
+            "Content-Disposition: attachment; filename=\"{}\"\r\n",
+            fname
+        )
     } else {
         String::new()
     };
@@ -701,10 +704,7 @@ async fn send_json_response(
     Ok(())
 }
 
-async fn send_raw_response(
-    stream: &mut TcpStream,
-    response_data: &[u8],
-) -> Result<(), AuthError> {
+async fn send_raw_response(stream: &mut TcpStream, response_data: &[u8]) -> Result<(), AuthError> {
     stream
         .write_all(response_data)
         .await
@@ -751,7 +751,13 @@ async fn handle_connection(
             break;
         }
         if header_buf.len() > max_header_bytes {
-            send_json_response(&mut stream, HTTP_STATUS_BAD_REQUEST, JSON_ERROR_BAD_REQUEST, "POST").await?;
+            send_json_response(
+                &mut stream,
+                HTTP_STATUS_BAD_REQUEST,
+                JSON_ERROR_BAD_REQUEST,
+                "POST",
+            )
+            .await?;
             return Ok(());
         }
     }
@@ -800,7 +806,13 @@ async fn handle_connection(
     let parts: Vec<&str> = first_line.split_whitespace().collect();
 
     if parts.len() < MIN_HTTP_REQUEST_LINE_PARTS {
-        send_json_response(&mut stream, HTTP_STATUS_BAD_REQUEST, JSON_ERROR_BAD_REQUEST, "GET").await?;
+        send_json_response(
+            &mut stream,
+            HTTP_STATUS_BAD_REQUEST,
+            JSON_ERROR_BAD_REQUEST,
+            "GET",
+        )
+        .await?;
         return Ok(());
     }
 
@@ -835,7 +847,13 @@ async fn handle_connection(
             return Ok(());
         }
         HttpRoute::Analytics => {
-            send_json_response(&mut stream, HTTP_STATUS_OK, "{\"analytics\": \"recorded\"}", method).await?;
+            send_json_response(
+                &mut stream,
+                HTTP_STATUS_OK,
+                "{\"analytics\": \"recorded\"}",
+                method,
+            )
+            .await?;
             return Ok(());
         }
         HttpRoute::BinaryArtifact(filename, content_type) => {
@@ -847,7 +865,8 @@ async fn handle_connection(
         HttpRoute::DownloadsPath(relative_dl) => {
             let content_type = get_mime_type(&relative_dl);
             if let Some(fp) = resolve_binary_artifact(&relative_dl, web_dir.as_deref()) {
-                serve_file_stream(&mut stream, &fp, content_type, method, Some(&relative_dl)).await?;
+                serve_file_stream(&mut stream, &fp, content_type, method, Some(&relative_dl))
+                    .await?;
                 return Ok(());
             }
         }
@@ -894,7 +913,13 @@ async fn handle_connection(
         HttpRoute::NotFound => {}
     }
 
-    send_json_response(&mut stream, HTTP_STATUS_NOT_FOUND, JSON_ERROR_NOT_FOUND, method).await?;
+    send_json_response(
+        &mut stream,
+        HTTP_STATUS_NOT_FOUND,
+        JSON_ERROR_NOT_FOUND,
+        method,
+    )
+    .await?;
     Ok(())
 }
 

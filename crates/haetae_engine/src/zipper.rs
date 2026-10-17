@@ -1,26 +1,45 @@
 use haetae_core::config::{
-    BYTES_PER_MB, COLLISION_WINDOW_TOKENS, L3_CACHE_BOUND_MB, L3_CACHE_PER_CORE_BOUND_MB,
+    BYTES_PER_MB, COLLISION_WINDOW_TOKENS, DEFAULT_CONTEXT_WINDOW_TOKENS, L3_CACHE_BOUND_MB,
+    L3_CACHE_PER_CORE_BOUND_MB,
 };
+
+pub type TokenId = u32;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ZipperDecoder {
-    pub prefix_tokens: Vec<u32>,
-    pub suffix_tokens: Vec<u32>,
+    pub prefix_tokens: Vec<TokenId>,
+    pub suffix_tokens: Vec<TokenId>,
     pub collision_window: usize,
+    pub max_buffer_tokens: usize,
     pub converged: bool,
 }
 
 impl ZipperDecoder {
-    pub fn new(prefix_seed: &[u32], suffix_seed: &[u32], collision_window: usize) -> Self {
+    pub fn new(prefix_seed: &[TokenId], suffix_seed: &[TokenId], collision_window: usize) -> Self {
         Self {
             prefix_tokens: prefix_seed.to_vec(),
             suffix_tokens: suffix_seed.to_vec(),
-            collision_window: collision_window.max(COLLISION_WINDOW_TOKENS),
+            collision_window: collision_window.max(1),
+            max_buffer_tokens: DEFAULT_CONTEXT_WINDOW_TOKENS,
             converged: false,
         }
     }
 
-    pub fn argmax(logits: &[f32]) -> u32 {
+    pub fn with_collision_window(mut self, window: usize) -> Self {
+        self.collision_window = window.max(1);
+        self
+    }
+
+    pub fn with_max_buffer_tokens(mut self, max_tokens: usize) -> Self {
+        self.max_buffer_tokens = max_tokens;
+        self
+    }
+
+    pub fn set_collision_window(&mut self, window: usize) {
+        self.collision_window = window.max(1);
+    }
+
+    pub fn argmax(logits: &[f32]) -> TokenId {
         if logits.is_empty() {
             return 0;
         }
@@ -33,16 +52,49 @@ impl ZipperDecoder {
                 best_idx = idx;
             }
         }
-        best_idx as u32
+        best_idx as TokenId
     }
 
-    pub fn step_token_pair(&mut self, token_fwd: u32, token_bwd: u32) -> (u32, u32) {
+    pub fn total_tokens_count(&self) -> usize {
+        self.prefix_tokens.len() + self.suffix_tokens.len()
+    }
+
+    pub fn is_within_sliding_bounds(&self) -> bool {
+        if self.max_buffer_tokens == 0 {
+            true
+        } else {
+            self.total_tokens_count() <= self.max_buffer_tokens
+        }
+    }
+
+    pub fn enforce_sliding_bounds(&mut self) {
+        if self.max_buffer_tokens == 0 {
+            return;
+        }
+        while self.total_tokens_count() > self.max_buffer_tokens {
+            if self.prefix_tokens.len() > self.suffix_tokens.len() && !self.prefix_tokens.is_empty()
+            {
+                self.prefix_tokens.remove(0);
+            } else if !self.suffix_tokens.is_empty() {
+                self.suffix_tokens.pop();
+            } else {
+                break;
+            }
+        }
+    }
+
+    pub fn step_token_pair(
+        &mut self,
+        token_fwd: TokenId,
+        token_bwd: TokenId,
+    ) -> (TokenId, TokenId) {
         if self.converged {
             return (0, 0);
         }
 
         self.prefix_tokens.push(token_fwd);
         self.suffix_tokens.insert(0, token_bwd);
+        self.enforce_sliding_bounds();
 
         if self.check_collision() {
             self.converged = true;
@@ -55,7 +107,7 @@ impl ZipperDecoder {
         &mut self,
         logits_forward: &[f32],
         logits_backward: &[f32],
-    ) -> (u32, u32) {
+    ) -> (TokenId, TokenId) {
         if self.converged {
             return (0, 0);
         }
@@ -64,6 +116,19 @@ impl ZipperDecoder {
         let token_bwd = Self::argmax(logits_backward);
 
         self.step_token_pair(token_fwd, token_bwd)
+    }
+
+    pub fn converge_with_generated_tokens(&mut self, tokens: &[TokenId]) -> Vec<TokenId> {
+        for (&tf, &tb) in tokens.iter().zip(tokens.iter().rev()) {
+            if self.converged {
+                break;
+            }
+            self.step_token_pair(tf, tb);
+        }
+        if !self.converged {
+            self.converged = self.check_collision();
+        }
+        self.stitch_sequence()
     }
 
     pub fn check_collision(&self) -> bool {
@@ -86,7 +151,7 @@ impl ZipperDecoder {
         false
     }
 
-    pub fn stitch_sequence(&self) -> Vec<u32> {
+    pub fn stitch_sequence(&self) -> Vec<TokenId> {
         let mut result = self.prefix_tokens.clone();
         let p_len = self.prefix_tokens.len();
         let s_len = self.suffix_tokens.len();
@@ -105,11 +170,15 @@ impl ZipperDecoder {
     }
 
     pub fn buffer_size_bytes(&self) -> usize {
-        (self.prefix_tokens.len() + self.suffix_tokens.len()) * std::mem::size_of::<u32>()
+        self.total_tokens_count() * std::mem::size_of::<TokenId>()
     }
 
     pub fn is_l3_compliant(&self) -> bool {
-        self.buffer_size_bytes() <= (L3_CACHE_BOUND_MB * BYTES_PER_MB)
+        self.is_l3_bound_compliant(L3_CACHE_BOUND_MB)
+    }
+
+    pub fn is_l3_bound_compliant(&self, bound_mb: usize) -> bool {
+        self.buffer_size_bytes() <= (bound_mb * BYTES_PER_MB)
     }
 
     pub fn is_per_core_l3_compliant(&self) -> bool {

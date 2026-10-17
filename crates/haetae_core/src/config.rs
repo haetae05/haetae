@@ -24,8 +24,7 @@ pub const POW10_3: usize = POW10_2 * BASE_DECIMAL;
 pub const POW10_4: usize = POW10_3 * BASE_DECIMAL;
 pub const POW10_5: usize = POW10_4 * BASE_DECIMAL;
 
-pub const LICENSE_VALIDITY_DAYS: u64 =
-    HOURS_PER_DAY + (MINS_PER_HOUR / (BASE_DECIMAL as u64));
+pub const LICENSE_VALIDITY_DAYS: u64 = HOURS_PER_DAY + (MINS_PER_HOUR / (BASE_DECIMAL as u64));
 
 pub const BOOST_STAGE1_SWAP_ITERATIONS: usize = POW10_2 / BISECTION_DIVISOR;
 pub const BOOST_STAGE2_MIM_TOKENS: usize = POW10_5 / BISECTION_DIVISOR;
@@ -49,6 +48,9 @@ pub const ALT_SIGNAL_STACK_SIZE_BYTES: usize = 1 << 17;
 pub const MAX_CALL_STACK_DEPTH: usize = 1 << 6;
 pub const CACHE_LINE_BYTES: usize = 1 << 6;
 pub const L3_CACHE_BOUND_MB: usize = 1 << 5;
+pub const L3_CACHE_32MB: usize = 1 << (BASE_DECIMAL / BISECTION_DIVISOR);
+pub const L3_CACHE_64MB: usize = 1 << (std::mem::size_of::<u64>() - BISECTION_DIVISOR);
+pub const L3_CACHE_96MB: usize = L3_CACHE_64MB + L3_CACHE_32MB;
 pub const L3_CACHE_PER_CORE_BOUND_MB: usize = std::mem::size_of::<u64>();
 pub const L3_SAFETY_MARGIN_MB: usize = BASE_DECIMAL / BISECTION_DIVISOR;
 pub const WEIGHT_SLICE_SIZE_MB: usize = DAYS_PER_WEEK as usize * L3_SAFETY_MARGIN_MB;
@@ -65,8 +67,7 @@ pub const BYTES_PER_MB: usize = 1 << 20;
 pub const HTTP_TIMEOUT_SECS: u64 = LICENSE_VALIDITY_DAYS;
 pub const HTTP_CONNECT_TIMEOUT_SECS: u64 = BISECTION_DIVISOR as u64;
 pub const PAGERANK_DAMPING_FACTOR: f64 =
-    (((BASE_DECIMAL * std::mem::size_of::<u64>()) + VSIX_MAX_SIZE_MB) as f64)
-        / (POW10_2 as f64);
+    (((BASE_DECIMAL * std::mem::size_of::<u64>()) + VSIX_MAX_SIZE_MB) as f64) / (POW10_2 as f64);
 pub const PAGERANK_MAX_ITERATIONS: usize = POW10_2;
 pub const PAGERANK_CONVERGENCE_EPSILON: f64 = 1.0 / (POW10_4 as f64);
 pub const MODEL_DOWNLOAD_CHUNK_SIZE: usize = 1 << 16;
@@ -144,8 +145,7 @@ pub const AARCH64_STP_PRE_MASK: u32 = 0xffc003e0;
 pub const AARCH64_STP_PRE_MATCH: u32 = 0xa98003e0;
 pub const AARCH64_LDP_POST_MASK: u32 = 0xffc003e0;
 pub const AARCH64_LDP_POST_MATCH: u32 = 0xa8c003e0;
-pub const AARCH64_STP_IMM7_SHIFT: u32 =
-    ((1 << std::mem::size_of::<u32>()) - BYTE_ONE) as u32;
+pub const AARCH64_STP_IMM7_SHIFT: u32 = ((1 << std::mem::size_of::<u32>()) - BYTE_ONE) as u32;
 pub const AARCH64_STP_IMM7_MASK: u32 = 0x7f;
 pub const AARCH64_STP_IMM7_SIGN_BIT: u32 = 0x40;
 pub const AARCH64_STP_SCALE_BYTES: usize = std::mem::size_of::<u64>();
@@ -165,8 +165,7 @@ pub const RISCV_ADDI_SP_MATCH: u32 = 0x00010113;
 pub const RISCV_ADDI_IMM12_SHIFT: u32 = (BISECTION_DIVISOR * BASE_DECIMAL) as u32;
 pub const RISCV_ADDI_IMM12_MASK: u32 = 0xfff;
 pub const RISCV_ADDI_IMM12_SIGN_BIT: u32 = 0x800;
-pub const RISCV_ADDI_SIGN_EXTEND: i32 =
-    1 << ((BASE_DECIMAL + BISECTION_DIVISOR) as u32);
+pub const RISCV_ADDI_SIGN_EXTEND: i32 = 1 << ((BASE_DECIMAL + BISECTION_DIVISOR) as u32);
 pub const RISCV_ADDI_SP_MINUS_64: u32 = 0xfc010113;
 pub const RISCV_C_ADDI16SP_MASK: u16 = 0xef83;
 pub const RISCV_C_ADDI16SP_MATCH: u16 = 0x6101;
@@ -386,6 +385,26 @@ impl Config {
                 cfg.target_isa = isa;
             }
         }
+        if let Ok(v) = std::env::var("HAETAE_L3_CACHE_MB") {
+            if let Ok(n) = v.parse::<usize>() {
+                cfg.l3_cache_bound_mb = n;
+            }
+        }
+        if let Ok(v) = std::env::var("HAETAE_WEIGHT_SLICE_MB") {
+            if let Ok(n) = v.parse::<usize>() {
+                cfg.weight_slice_size_mb = n;
+            }
+        }
+        if let Ok(v) = std::env::var("HAETAE_COLLISION_WINDOW") {
+            if let Ok(n) = v.parse::<usize>() {
+                cfg.collision_window_tokens = n;
+            }
+        }
+        if let Ok(v) = std::env::var("HAETAE_TOKENS_PER_CYCLE") {
+            if let Ok(n) = v.parse::<usize>() {
+                cfg.tokens_per_cycle = n;
+            }
+        }
         cfg
     }
 }
@@ -393,11 +412,9 @@ impl Config {
 // ============================================================================
 // XorShift64 PRNG & Multi-Parameter Payload Derivation Constants
 // ============================================================================
-pub const XORSHIFT_SHIFT_A: u32 =
-    ((1 << std::mem::size_of::<u32>()) - STEP_TRIO) as u32;
+pub const XORSHIFT_SHIFT_A: u32 = ((1 << std::mem::size_of::<u32>()) - STEP_TRIO) as u32;
 pub const XORSHIFT_SHIFT_B: u32 = DAYS_PER_WEEK as u32;
-pub const XORSHIFT_SHIFT_C: u32 =
-    ((1 << std::mem::size_of::<u32>()) + BYTE_ONE) as u32;
+pub const XORSHIFT_SHIFT_C: u32 = ((1 << std::mem::size_of::<u32>()) + BYTE_ONE) as u32;
 pub const XORSHIFT_DEFAULT_SEED: u64 = 0x8a5cd789635d2dff;
 pub const XORSHIFT_PAYLOAD_MASK: u64 = 0xffffffffffffffff;
 pub const PRNG_DERIVE_PRIME_1: u64 = 0x9e3779b97f4a7c15;

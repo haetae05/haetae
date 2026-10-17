@@ -1,5 +1,6 @@
 use haetae_core::config::{
-    BISECTION_DIVISOR, BYTES_PER_MB, L3_CACHE_BOUND_MB, L3_SAFETY_MARGIN_MB, WEIGHT_SLICE_SIZE_MB,
+    Config, BISECTION_DIVISOR, BYTES_PER_MB, L3_CACHE_BOUND_MB, L3_SAFETY_MARGIN_MB,
+    WEIGHT_SLICE_SIZE_MB,
 };
 
 pub const MIN_RING_BUFFER_SLICES: usize = BISECTION_DIVISOR;
@@ -14,7 +15,11 @@ pub struct WeightRingBuffer {
 
 impl WeightRingBuffer {
     pub fn new(total_slices: usize) -> Self {
-        let slice_size_bytes = WEIGHT_SLICE_SIZE_MB * BYTES_PER_MB;
+        Self::with_slice_size_mb(total_slices, WEIGHT_SLICE_SIZE_MB)
+    }
+
+    pub fn with_slice_size_mb(total_slices: usize, slice_size_mb: usize) -> Self {
+        let slice_size_bytes = slice_size_mb * BYTES_PER_MB;
         Self {
             slice_size_bytes,
             total_slices: total_slices.max(MIN_RING_BUFFER_SLICES),
@@ -24,9 +29,20 @@ impl WeightRingBuffer {
         }
     }
 
+    pub fn from_config(cfg: &Config, total_slices: usize) -> Self {
+        Self::with_slice_size_mb(total_slices, cfg.weight_slice_size_mb)
+    }
+
+    pub fn slice_size_mb(&self) -> usize {
+        self.slice_size_bytes / BYTES_PER_MB
+    }
+
     pub fn is_l3_compliant(&self) -> bool {
-        self.slice_size_bytes
-            <= (L3_CACHE_BOUND_MB * BYTES_PER_MB + L3_SAFETY_MARGIN_MB * BYTES_PER_MB)
+        self.is_l3_bound_compliant(L3_CACHE_BOUND_MB + L3_SAFETY_MARGIN_MB)
+    }
+
+    pub fn is_l3_bound_compliant(&self, bound_mb: usize) -> bool {
+        self.slice_size_bytes <= (bound_mb * BYTES_PER_MB)
     }
 
     pub fn load_active_slice(&mut self, data: &[u8]) {
@@ -46,5 +62,15 @@ impl WeightRingBuffer {
 
     pub fn active_slice(&self) -> &[u8] {
         &self.active_buffer
+    }
+
+    pub fn prefetch_slice(&self) -> &[u8] {
+        &self.prefetch_buffer
+    }
+
+    pub fn reset(&mut self) {
+        self.current_slice_idx = 0;
+        self.active_buffer.fill(0);
+        self.prefetch_buffer.fill(0);
     }
 }

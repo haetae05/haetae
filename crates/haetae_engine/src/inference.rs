@@ -331,3 +331,267 @@ impl InferenceClient {
         self.generate_raw(&prompt, stop_tokens).await
     }
 }
+
+#[allow(async_fn_in_trait)]
+pub trait ModelServingEngine: Send + Sync {
+    fn engine_name(&self) -> &str;
+    fn model_name(&self) -> &str;
+    async fn is_available(&self) -> bool;
+    async fn generate_raw(
+        &self,
+        prompt: &str,
+        stop_tokens: Vec<String>,
+    ) -> Result<String, ModelError>;
+
+    async fn generate_fim(&self, assembled_fim: &str) -> Result<String, ModelError> {
+        let stop_tokens = vec![
+            "<|fim_prefix|>".to_string(),
+            "<|fim_suffix|>".to_string(),
+            "<|fim_middle|>".to_string(),
+            "<|endoftext|>".to_string(),
+            "<|file_sep|>".to_string(),
+            "<|im_end|>".to_string(),
+        ];
+        self.generate_raw(assembled_fim, stop_tokens).await
+    }
+
+    async fn generate_instruction(
+        &self,
+        target_lang: &str,
+        instruction: &str,
+    ) -> Result<String, ModelError> {
+        let prompt = format!(
+            "<|im_start|>system\nYou are Haetae, a contract-driven silent coding engine. Output only valid, production-ready {} code fulfilling the user instruction. Zero markdown formatting, zero comments, zero conversation.<|im_end|>\n<|im_start|>user\n{}\n<|im_end|>\n<|im_start|>assistant\n",
+            target_lang, instruction
+        );
+        let stop_tokens = vec![
+            "<|im_start|>".to_string(),
+            "<|im_end|>".to_string(),
+            "<|endoftext|>".to_string(),
+        ];
+        self.generate_raw(&prompt, stop_tokens).await
+    }
+
+    async fn generate_refactor(
+        &self,
+        target_lang: &str,
+        instruction: &str,
+        code_to_refactor: &str,
+        source_primitive: &str,
+        target_primitive: &str,
+    ) -> Result<String, ModelError> {
+        let prompt = format!(
+            "<|im_start|>system\nYou are Haetae, a contract-driven silent coding engine. Refactor the provided {} code according to the instruction. Transform primitives from {} to {}. Output strictly valid refactored code. Zero markdown formatting, zero comments, zero conversation.<|im_end|>\n<|im_start|>user\nInstruction: {}\nOriginal Code:\n{}\n<|im_end|>\n<|im_start|>assistant\n",
+            target_lang, source_primitive, target_primitive, instruction, code_to_refactor
+        );
+        let stop_tokens = vec![
+            "<|im_start|>".to_string(),
+            "<|im_end|>".to_string(),
+            "<|endoftext|>".to_string(),
+        ];
+        self.generate_raw(&prompt, stop_tokens).await
+    }
+}
+
+impl ModelServingEngine for InferenceClient {
+    fn engine_name(&self) -> &str {
+        "ollama"
+    }
+
+    fn model_name(&self) -> &str {
+        &self.model
+    }
+
+    async fn is_available(&self) -> bool {
+        self.is_model_available().await
+    }
+
+    async fn generate_raw(
+        &self,
+        prompt: &str,
+        stop_tokens: Vec<String>,
+    ) -> Result<String, ModelError> {
+        self.generate_raw(prompt, stop_tokens).await
+    }
+
+    async fn generate_fim(&self, assembled_fim: &str) -> Result<String, ModelError> {
+        self.generate_fim(assembled_fim).await
+    }
+
+    async fn generate_instruction(
+        &self,
+        target_lang: &str,
+        instruction: &str,
+    ) -> Result<String, ModelError> {
+        self.generate_instruction(target_lang, instruction).await
+    }
+
+    async fn generate_refactor(
+        &self,
+        target_lang: &str,
+        instruction: &str,
+        code_to_refactor: &str,
+        source_primitive: &str,
+        target_primitive: &str,
+    ) -> Result<String, ModelError> {
+        self.generate_refactor(
+            target_lang,
+            instruction,
+            code_to_refactor,
+            source_primitive,
+            target_primitive,
+        )
+        .await
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum LocalBackendKind {
+    Ollama,
+    LlamaCpp,
+    Candle,
+}
+
+impl LocalBackendKind {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Ollama => "ollama",
+            Self::LlamaCpp => "llama.cpp",
+            Self::Candle => "candle",
+        }
+    }
+}
+
+pub struct LlamaCppEngine {
+    endpoint: String,
+    model: String,
+    client: reqwest::Client,
+}
+
+impl LlamaCppEngine {
+    pub fn new(endpoint: impl Into<String>, model: impl Into<String>) -> Self {
+        let client = reqwest::Client::builder()
+            .timeout(Duration::from_secs(INFERENCE_TIMEOUT_SECS))
+            .connect_timeout(Duration::from_secs(HTTP_CONNECT_TIMEOUT_SECS))
+            .build()
+            .unwrap_or_else(|_| reqwest::Client::new());
+
+        Self {
+            endpoint: endpoint.into(),
+            model: model.into(),
+            client,
+        }
+    }
+}
+
+impl ModelServingEngine for LlamaCppEngine {
+    fn engine_name(&self) -> &str {
+        "llama.cpp"
+    }
+
+    fn model_name(&self) -> &str {
+        &self.model
+    }
+
+    async fn is_available(&self) -> bool {
+        let health_url = format!("{}/health", self.endpoint);
+        match self.client.get(&health_url).send().await {
+            Ok(resp) => resp.status().as_u16() == HTTP_OK,
+            Err(_) => false,
+        }
+    }
+
+    async fn generate_raw(
+        &self,
+        prompt: &str,
+        stop_tokens: Vec<String>,
+    ) -> Result<String, ModelError> {
+        let completion_url = format!("{}/completion", self.endpoint);
+        #[derive(serde::Serialize)]
+        struct LlamaCppRequest<'a> {
+            prompt: &'a str,
+            n_predict: usize,
+            temperature: f64,
+            stop: Vec<String>,
+        }
+        #[derive(serde::Deserialize)]
+        struct LlamaCppResponse {
+            content: Option<String>,
+        }
+        let req = LlamaCppRequest {
+            prompt,
+            n_predict: OLLAMA_NUM_PREDICT,
+            temperature: OLLAMA_TEMPERATURE_ZERO,
+            stop: stop_tokens,
+        };
+        let resp = self
+            .client
+            .post(&completion_url)
+            .json(&req)
+            .send()
+            .await
+            .map_err(|e| ModelError::Network(e.to_string()))?;
+
+        let status = resp.status().as_u16();
+        if status != HTTP_OK {
+            return Err(ModelError::HttpStatus(status));
+        }
+
+        let body: LlamaCppResponse = resp
+            .json()
+            .await
+            .map_err(|e| ModelError::Inference(e.to_string()))?;
+        let raw = body.content.unwrap_or_default();
+        let stripped = strip_reasoning_tags(&raw);
+        Ok(strip_markdown_code_fences(&stripped))
+    }
+}
+
+pub struct CandleEngine {
+    model_path: std::path::PathBuf,
+    model_name: String,
+}
+
+impl CandleEngine {
+    pub fn new(model_path: impl Into<std::path::PathBuf>, model_name: impl Into<String>) -> Self {
+        Self {
+            model_path: model_path.into(),
+            model_name: model_name.into(),
+        }
+    }
+
+    pub fn model_path(&self) -> &std::path::Path {
+        &self.model_path
+    }
+}
+
+impl ModelServingEngine for CandleEngine {
+    fn engine_name(&self) -> &str {
+        "candle"
+    }
+
+    fn model_name(&self) -> &str {
+        &self.model_name
+    }
+
+    async fn is_available(&self) -> bool {
+        self.model_path.is_file()
+    }
+
+    async fn generate_raw(
+        &self,
+        _prompt: &str,
+        _stop_tokens: Vec<String>,
+    ) -> Result<String, ModelError> {
+        if !self.is_available().await {
+            return Err(ModelError::ModelUnavailable(format!(
+                "Candle model weights not found at {:?}",
+                self.model_path
+            )));
+        }
+        Err(ModelError::Inference(
+            "Candle in-process generation requires local weights to be compiled or loaded"
+                .to_string(),
+        ))
+    }
+}

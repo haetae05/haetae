@@ -952,7 +952,9 @@ __attribute__((visibility("default"))) int haetae_safe_call_multi(const long lon
             return Ok(out_res);
         }
 
-        crate::evaluator::evaluate_c_source(&code.source_code, payload)
+        Err(VerifyError::SymbolNotFound(
+            "Native JIT safe call entrypoint not loaded".to_string(),
+        ))
     }
 
     pub fn execute_entry_with_payloads(
@@ -976,8 +978,9 @@ __attribute__((visibility("default"))) int haetae_safe_call_multi(const long lon
             return Ok(out_res);
         }
 
-        let first = payloads.first().copied().unwrap_or(0i64);
-        crate::evaluator::evaluate_c_source(&code.source_code, first)
+        Err(VerifyError::SymbolNotFound(
+            "Native JIT safe call multi entrypoint not loaded".to_string(),
+        ))
     }
 
     pub fn get_bytecode<'a>(&self, code: &'a CompiledCode) -> &'a [u8] {

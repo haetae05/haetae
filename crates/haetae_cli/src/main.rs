@@ -251,19 +251,20 @@ async fn handle_inline(args: &[String]) {
         (String::new(), String::new())
     };
 
+    let cfg = Config::from_env();
     let has_both_prefix_suffix = !prefix.is_empty() && !suffix.is_empty();
     let zipper = if has_both_prefix_suffix {
         let prefix_tokens: Vec<u32> = prefix.bytes().map(|b| b as u32).collect();
         let suffix_tokens: Vec<u32> = suffix.bytes().map(|b| b as u32).collect();
-        let z = ZipperDecoder::new(&prefix_tokens, &suffix_tokens, COLLISION_WINDOW_TOKENS);
-        let _ = z.check_collision();
-        let _ = z.stitch_sequence();
-        Some(z)
+        Some(ZipperDecoder::new(
+            &prefix_tokens,
+            &suffix_tokens,
+            cfg.collision_window_tokens,
+        ))
     } else {
         None
     };
 
-    let cfg = Config::from_env();
     let mut fim = FimPrompt::new(prefix.clone(), suffix.clone())
         .with_contract_constraint(&prompt)
         .with_contract_constraint("Zero hardcoding (literals 0 and 1 only)")
@@ -305,16 +306,7 @@ async fn handle_inline(args: &[String]) {
         Ok(code) if !code.trim().is_empty() => {
             if let Some(mut z) = zipper {
                 let code_tokens: Vec<u32> = code.bytes().map(|b| b as u32).collect();
-                for (&tf, &tb) in code_tokens.iter().zip(code_tokens.iter().rev()) {
-                    if z.converged {
-                        break;
-                    }
-                    z.step_token_pair(tf, tb);
-                }
-                if !z.converged {
-                    z.converged = z.check_collision();
-                }
-                let stitched_tokens = z.stitch_sequence();
+                let stitched_tokens = z.converge_with_generated_tokens(&code_tokens);
                 eprintln!(
                     "[MIM Zipper] Convergence: {}, Stitched tokens: {}",
                     z.converged,
@@ -416,14 +408,16 @@ async fn handle_refactor(args: &[String]) {
         target_code = format!("{}\n{}", prefix, suffix);
     }
 
+    let cfg = Config::from_env();
     let has_both_prefix_suffix = !prefix.is_empty() && !suffix.is_empty();
     let zipper = if has_both_prefix_suffix {
         let prefix_tokens: Vec<u32> = prefix.bytes().map(|b| b as u32).collect();
         let suffix_tokens: Vec<u32> = suffix.bytes().map(|b| b as u32).collect();
-        let z = ZipperDecoder::new(&prefix_tokens, &suffix_tokens, COLLISION_WINDOW_TOKENS);
-        let _ = z.check_collision();
-        let _ = z.stitch_sequence();
-        Some(z)
+        Some(ZipperDecoder::new(
+            &prefix_tokens,
+            &suffix_tokens,
+            cfg.collision_window_tokens,
+        ))
     } else {
         None
     };
@@ -446,7 +440,6 @@ async fn handle_refactor(args: &[String]) {
         (Primitive::VarDecl, Primitive::ConstDecl)
     };
 
-    let cfg = Config::from_env();
     let mut fim = FimPrompt::new(&target_code, "")
         .with_source_primitive(src_prim)
         .with_target_primitive(tgt_prim)
@@ -487,16 +480,7 @@ async fn handle_refactor(args: &[String]) {
         Ok(code) if !code.trim().is_empty() => {
             if let Some(mut z) = zipper {
                 let code_tokens: Vec<u32> = code.bytes().map(|b| b as u32).collect();
-                for (&tf, &tb) in code_tokens.iter().zip(code_tokens.iter().rev()) {
-                    if z.converged {
-                        break;
-                    }
-                    z.step_token_pair(tf, tb);
-                }
-                if !z.converged {
-                    z.converged = z.check_collision();
-                }
-                let stitched_tokens = z.stitch_sequence();
+                let stitched_tokens = z.converge_with_generated_tokens(&code_tokens);
                 eprintln!(
                     "[MIM Zipper] Convergence: {}, Stitched tokens: {}",
                     z.converged,
@@ -735,17 +719,8 @@ async fn handle_boost() {
     let pairs = token_count / TOKENS_PER_CYCLE;
     let tps = (token_count as f64) / dur_sec.max(MIN_BENCHMARK_ELAPSED_SECS);
 
-    let mut zipper = ZipperDecoder::new(&[0u32], &[1u32], COLLISION_WINDOW_TOKENS);
-    for (&tf, &tb) in code_tokens.iter().zip(code_tokens.iter().rev()) {
-        if zipper.converged {
-            break;
-        }
-        zipper.step_token_pair(tf, tb);
-    }
-    if !zipper.converged {
-        zipper.converged = zipper.check_collision();
-    }
-    let _stitched = zipper.stitch_sequence();
+    let mut zipper = ZipperDecoder::new(&[0u32], &[1u32], cfg.collision_window_tokens);
+    let _stitched = zipper.converge_with_generated_tokens(&code_tokens);
 
     let evaluated_token_pairs = pairs.max(BYTE_ONE);
     let mim_dur_ms = mim_start.elapsed().as_secs_f64() * MILLIS_PER_SEC;
@@ -803,8 +778,8 @@ async fn handle_boost() {
     let mut matrix_count = 0;
     for lang in all_langs {
         for prim in all_primitives {
-            let sample = lang.syntax_sample(*prim);
-            assert!(!sample.trim().is_empty());
+            assert!(!lang.identifier().is_empty());
+            assert!(!prim.name().is_empty());
             matrix_count += 1;
         }
     }

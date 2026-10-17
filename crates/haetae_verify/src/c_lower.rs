@@ -503,6 +503,18 @@ pub fn is_known_type(s: &str) -> bool {
     matches!(
         s,
         "int"
+            | "int64"
+            | "int32"
+            | "int16"
+            | "int8"
+            | "uint"
+            | "uint64"
+            | "uint32"
+            | "uint16"
+            | "uint8"
+            | "uintptr"
+            | "float64"
+            | "float32"
             | "i32"
             | "i64"
             | "long"
@@ -511,6 +523,8 @@ pub fn is_known_type(s: &str) -> bool {
             | "char"
             | "bool"
             | "boolean"
+            | "Bool"
+            | "Boolean"
             | "size_t"
             | "int32_t"
             | "int64_t"
@@ -528,6 +542,14 @@ pub fn is_known_type(s: &str) -> bool {
             | "usize"
             | "number"
             | "Int"
+            | "Int64"
+            | "Int32"
+            | "Long"
+            | "Float"
+            | "Double"
+            | "UInt"
+            | "UInt64"
+            | "any"
             | "string"
             | "String"
             | "void"
@@ -539,22 +561,20 @@ pub fn canonicalize_type(ty: &str) -> String {
     let t = ty.trim();
     match t {
         "void" => "void".to_string(),
-        "int" | "i32" | "number" | "Int" | "short" | "byte" | "int32_t" | "i16" | "i8" => {
-            "int".to_string()
-        }
-        "unsigned int" | "u32" | "uint32_t" | "u16" | "u8" | "uint" => "unsigned int".to_string(),
-        "long" | "i64" | "long long" | "int64_t" | "isize" | "usize" | "size_t" => {
-            "long long".to_string()
-        }
-        "unsigned long" | "u64" | "uint64_t" | "unsigned long long" | "ulong" => {
-            "unsigned long long".to_string()
-        }
-        "float" | "f32" => "float".to_string(),
-        "double" | "f64" => "double".to_string(),
+        "int" | "i32" | "int32" | "number" | "Int" | "Int32" | "short" | "byte" | "int32_t"
+        | "i16" | "int16" | "i8" | "int8" => "int".to_string(),
+        "unsigned int" | "u32" | "uint32" | "uint32_t" | "u16" | "uint16" | "u8" | "uint8"
+        | "uint" | "UInt" => "unsigned int".to_string(),
+        "long" | "i64" | "int64" | "Int64" | "Long" | "long long" | "int64_t" | "isize"
+        | "usize" | "size_t" | "uintptr" => "long long".to_string(),
+        "unsigned long" | "u64" | "uint64" | "uint64_t" | "UInt64" | "unsigned long long"
+        | "ulong" => "unsigned long long".to_string(),
+        "float" | "f32" | "float32" | "Float" => "float".to_string(),
+        "double" | "f64" | "float64" | "Double" => "double".to_string(),
         "char*" | "&str" | "string" | "String" => "const char*".to_string(),
         "void*" | "*mut" | "*const" | "ptr" => "void*".to_string(),
         "int*" => "int*".to_string(),
-        "bool" | "boolean" => "int".to_string(),
+        "bool" | "boolean" | "Bool" | "Boolean" => "int".to_string(),
         _ => "int".to_string(),
     }
 }
@@ -627,155 +647,10 @@ pub fn normalize_parameter(tokens: &[LowerToken]) -> Option<(String, String)> {
     None
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum AstBinOp {
-    Add,
-    Sub,
-    Mul,
-    Div,
-    Mod,
-    BitAnd,
-    BitOr,
-    BitXor,
-    Shl,
-    Shr,
-    Eq,
-    NotEq,
-    Lt,
-    LtEq,
-    Gt,
-    GtEq,
-    LogicalAnd,
-    LogicalOr,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum AstUnaryOp {
-    Neg,
-    Not,
-    BitNot,
-    Deref,
-}
-
-#[derive(Debug, Clone)]
-pub enum AstPattern {
-    Wildcard,
-    Literal(i64),
-    Ident(String),
-}
-
-#[derive(Debug, Clone)]
-pub enum AstExpr {
-    Number(i64),
-    Str(String),
-    Bool(bool),
-    NoneVal,
-    Ident(String),
-    Binary {
-        op: AstBinOp,
-        lhs: Box<AstExpr>,
-        rhs: Box<AstExpr>,
-    },
-    Unary {
-        op: AstUnaryOp,
-        operand: Box<AstExpr>,
-    },
-    Index {
-        array: Box<AstExpr>,
-        index: Box<AstExpr>,
-    },
-    Call {
-        callee: Box<AstExpr>,
-        args: Vec<AstExpr>,
-    },
-    MemberAccess {
-        object: Box<AstExpr>,
-        member: String,
-        is_arrow: bool,
-    },
-    Ternary {
-        cond: Box<AstExpr>,
-        true_expr: Box<AstExpr>,
-        false_expr: Box<AstExpr>,
-    },
-    MatchExpr {
-        target: Box<AstExpr>,
-        arms: Vec<(AstPattern, AstExpr)>,
-    },
-}
-
-#[derive(Debug, Clone)]
-pub enum AstStmt {
-    Return(Option<AstExpr>),
-    If {
-        condition: AstExpr,
-        then_branch: Vec<AstStmt>,
-        elif_branches: Vec<(AstExpr, Vec<AstStmt>)>,
-        else_branch: Option<Vec<AstStmt>>,
-    },
-    While {
-        condition: AstExpr,
-        body: Vec<AstStmt>,
-    },
-    For {
-        init: Option<String>,
-        condition: Option<AstExpr>,
-        step: Option<String>,
-        body: Vec<AstStmt>,
-    },
-    VarDecl {
-        name: String,
-        ty: String,
-        init: Option<AstExpr>,
-        is_array: bool,
-        array_size: Option<usize>,
-        array_elements: Vec<AstExpr>,
-    },
-    Assign {
-        target: String,
-        op: String,
-        value: AstExpr,
-    },
-    Match {
-        target: AstExpr,
-        arms: Vec<AstMatchArm>,
-    },
-    Expr(AstExpr),
-    Break,
-    Continue,
-}
-
-#[derive(Debug, Clone)]
-pub struct AstMatchArm {
-    pub pattern: AstPattern,
-    pub body: AstMatchBody,
-}
-
-#[derive(Debug, Clone)]
-pub enum AstMatchBody {
-    Expr(AstExpr),
-    Block(Vec<AstStmt>),
-}
-
 #[derive(Debug, Clone)]
 pub struct AstStruct {
     pub name: String,
     pub fields: Vec<(String, String)>,
-}
-
-#[derive(Debug, Clone)]
-pub struct AstFunction {
-    pub name: String,
-    pub return_type: String,
-    pub params: Vec<(String, String)>,
-    pub body: Vec<AstStmt>,
-}
-
-#[derive(Debug, Clone)]
-pub enum AstItem {
-    Preprocessor(String),
-    Struct(AstStruct),
-    Function(AstFunction),
 }
 
 pub type ParsedFunction = (String, String, Vec<(String, String)>);
@@ -818,49 +693,6 @@ impl<'a> StructuredCLowerer<'a> {
         } else {
             false
         }
-    }
-
-    pub fn parse_all(&mut self) -> Result<Vec<AstItem>, VerifyError> {
-        let mut items = Vec::new();
-
-        while self.pos < self.tokens.len() {
-            if self.match_tok(&LowerToken::Semi) {
-                continue;
-            }
-
-            if let Some(LowerToken::Preprocessor(p)) = self.peek() {
-                items.push(AstItem::Preprocessor(p.clone()));
-                self.pos += 1;
-                continue;
-            }
-
-            if self.peek() == Some(&LowerToken::KeywordStruct)
-                || self.peek() == Some(&LowerToken::KeywordClass)
-            {
-                let st = self.parse_struct()?;
-                items.push(AstItem::Struct(st));
-                continue;
-            }
-
-            if let [LowerToken::KeywordType, LowerToken::KeywordStruct, ..] =
-                &self.tokens[self.pos..]
-            {
-                self.pos += 1; // skip type
-                let st = self.parse_struct()?;
-                items.push(AstItem::Struct(st));
-                continue;
-            }
-
-            let (fn_name, _, params) = self.parse_function()?;
-            items.push(AstItem::Function(AstFunction {
-                name: fn_name,
-                return_type: "int".to_string(),
-                params,
-                body: Vec::new(),
-            }));
-        }
-
-        Ok(items)
     }
 
     pub fn parse_struct(&mut self) -> Result<AstStruct, VerifyError> {

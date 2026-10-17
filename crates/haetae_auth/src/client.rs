@@ -294,4 +294,3 @@ pub fn evaluate_offline_grace_period(
 
     true
 }
-
